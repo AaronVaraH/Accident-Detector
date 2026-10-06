@@ -403,11 +403,13 @@ def get_index():
 
 if __name__ == "__main__":
     import argparse
+    import os
     import socket
     import uvicorn
 
+    default_port = int(os.environ.get("PORT", 8000))
     parser = argparse.ArgumentParser(description="TITAN Vision PWA Server")
-    parser.add_argument("--port", type=int, default=8000, help="Puerto HTTP/HTTPS (por defecto 8000)")
+    parser.add_argument("--port", type=int, default=default_port, help="Puerto HTTP/HTTPS (por defecto 8000 o $PORT)")
     parser.add_argument("--ssl", action="store_true", help="Habilitar HTTPS para acceso directo a cámara móvil")
     args = parser.parse_args()
 

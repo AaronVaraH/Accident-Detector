@@ -103,13 +103,17 @@ async def shutdown_event():
 
 def generate_mjpeg_stream():
     """Generador HTTP multipart para streaming continuo de video con bajísima latencia."""
-    boundary = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
     import time
     try:
         while True:
             frame_bytes = pipeline_manager.get_latest_jpeg()
             if frame_bytes:
-                yield boundary + frame_bytes + b"\r\n"
+                header = (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame_bytes)).encode("ascii") + b"\r\n\r\n"
+                )
+                yield header + frame_bytes + b"\r\n"
             time.sleep(0.033)  # ~30 FPS
     except (GeneratorExit, asyncio.CancelledError):
         pass
@@ -125,6 +129,8 @@ def video_stream():
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         },
     )
 

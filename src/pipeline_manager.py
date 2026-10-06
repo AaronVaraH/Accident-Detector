@@ -229,9 +229,10 @@ class PipelineManager:
         def get_next_frame():
             nonlocal frame_idx
             if self.is_client_camera:
-                signaled = self._client_frame_event.wait(timeout=0.3)
+                signaled = self._client_frame_event.wait(timeout=0.6)
                 self._client_frame_event.clear()
-                if self._client_frame_buffer is not None:
+                now = time.time()
+                if self._client_frame_buffer is not None and (now - self._last_client_frame_time < 3.0):
                     frame_idx += 1
                     return frame_idx, self._client_frame_buffer
                 return None, None

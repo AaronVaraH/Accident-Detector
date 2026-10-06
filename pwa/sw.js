@@ -4,7 +4,7 @@
  * y despacho de notificaciones del sistema (Push / Web Notifications).
  */
 
-const CACHE_NAME = 'accident-detector-pwa-v4';
+const CACHE_NAME = 'accident-detector-pwa-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',

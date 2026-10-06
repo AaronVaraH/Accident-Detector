@@ -351,6 +351,9 @@ function updateTelemetryUI(data) {
 
   // Lista de Entidades en Tránsito
   renderEntitiesList(data.entities || []);
+
+  // Dibujar cajas y alertas de IA sobre la cámara local en vivo
+  drawTacticalOverlay(data);
 }
 
 function renderEntitiesList(entities) {
@@ -559,37 +562,144 @@ let currentFacingMode = 'environment';
 let isCameraActive = false;
 let isFlippingCamera = false;
 
+function drawTacticalOverlay(data) {
+  const overlayCanvas = document.getElementById('tactical-canvas-overlay');
+  if (!overlayCanvas) return;
+  const ctx = overlayCanvas.getContext('2d');
+  if (!ctx) return;
+
+  if (!isCameraActive) {
+    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    return;
+  }
+
+  const videoElem = document.getElementById('client-webcam');
+  if (!videoElem) return;
+
+  const rect = videoElem.getBoundingClientRect();
+  const width = Math.round(rect.width) || overlayCanvas.clientWidth || 640;
+  const height = Math.round(rect.height) || overlayCanvas.clientHeight || 480;
+
+  if (overlayCanvas.width !== width || overlayCanvas.height !== height) {
+    overlayCanvas.width = width;
+    overlayCanvas.height = height;
+  }
+
+  ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+  const scaleX = width / 640;
+  const scaleY = height / 480;
+
+  // 1. Entidades (vehículos, personas)
+  const entities = data.entities || [];
+  entities.forEach((ent) => {
+    if (!ent.box || ent.box.length < 4) return;
+    const [x1, y1, x2, y2] = ent.box;
+    const bx = x1 * scaleX;
+    const by = y1 * scaleY;
+    const bw = (x2 - x1) * scaleX;
+    const bh = (y2 - y1) * scaleY;
+
+    const isPerson = (ent.raw_class || '').toLowerCase() in { persona: 1, person: 1 };
+    const isSpeeding = ent.speed > 50.0;
+    const boxColor = isPerson ? '#00ffd5' : (isSpeeding ? '#ff3b30' : '#00f0ff');
+
+    // Recuadro táctico con esquinas reforzadas
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = boxColor;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // Etiqueta superior
+    const labelText = isPerson
+      ? `PEATÓN #${ent.id}`
+      : `${(ent.class || 'VEHÍCULO').toUpperCase()} ${ent.speed ? ent.speed + ' km/h' : ''}`;
+
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    const textWidth = ctx.measureText(labelText).width;
+    ctx.fillStyle = 'rgba(8, 14, 26, 0.85)';
+    ctx.fillRect(bx, Math.max(0, by - 18), textWidth + 10, 18);
+    ctx.strokeStyle = boxColor;
+    ctx.strokeRect(bx, Math.max(0, by - 18), textWidth + 10, 18);
+
+    ctx.fillStyle = boxColor;
+    ctx.fillText(labelText, bx + 5, Math.max(12, by - 5));
+  });
+
+  // 2. Fuego y Humo
+  const fireSmoke = data.fire_smoke || [];
+  fireSmoke.forEach((fs) => {
+    if (!fs.box || fs.box.length < 4) return;
+    const [x1, y1, x2, y2] = fs.box;
+    const bx = x1 * scaleX;
+    const by = y1 * scaleY;
+    const bw = (x2 - x1) * scaleX;
+    const bh = (y2 - y1) * scaleY;
+
+    const isFire = fs.type === 'fire';
+    const boxColor = isFire ? '#ff2a5f' : '#ff9800';
+
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = boxColor;
+    ctx.setLineDash([6, 3]);
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.setLineDash([]);
+
+    const labelText = isFire ? '🔥 FUEGO' : '💨 HUMO';
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    const textWidth = ctx.measureText(labelText).width;
+    ctx.fillStyle = 'rgba(255, 42, 95, 0.9)';
+    ctx.fillRect(bx, Math.max(0, by - 18), textWidth + 10, 18);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(labelText, bx + 5, Math.max(12, by - 5));
+  });
+}
+
 function startHttpUplinkFallback(videoElem, canvas, ctx) {
   if (uplinkInterval) clearInterval(uplinkInterval);
   let isSending = false;
   uplinkInterval = setInterval(() => {
     if (!clientVideoStream || isSending || !isCameraActive || isFlippingCamera) return;
-    ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(async (blob) => {
-      if (!blob || !clientVideoStream || !isCameraActive || isFlippingCamera) return;
+    if (videoElem.readyState < 2 || videoElem.videoWidth === 0) return;
+
+    try {
+      ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
       isSending = true;
-      try {
-        await fetch('/api/client-frame', {
-          method: 'POST',
-          body: blob,
-          headers: { 'Content-Type': 'image/jpeg' },
-        });
-      } catch (err) {
-        console.debug('[HTTP Uplink] Esperando backend...');
-      } finally {
-        isSending = false;
-      }
-    }, 'image/jpeg', 0.60);
-  }, 75); // ~13 FPS
+      canvas.toBlob(async (blob) => {
+        if (!blob || !clientVideoStream || !isCameraActive || isFlippingCamera) {
+          isSending = false;
+          return;
+        }
+        try {
+          await fetch('/api/client-frame', {
+            method: 'POST',
+            body: blob,
+            headers: { 'Content-Type': 'image/jpeg' },
+          });
+        } catch (err) {
+          console.debug('[HTTP Uplink] Esperando backend...');
+        } finally {
+          isSending = false;
+        }
+      }, 'image/jpeg', 0.60);
+    } catch (e) {
+      isSending = false;
+    }
+  }, 80); // ~12 FPS
 }
 
 async function startDeviceCamera() {
   const loader = document.getElementById('stream-loader');
-  try {
-    const videoElem = document.getElementById('client-webcam');
-    const canvas = document.getElementById('client-canvas');
-    const ctx = canvas.getContext('2d');
+  const videoElem = document.getElementById('client-webcam');
+  const mainStream = document.getElementById('main-stream');
+  const tacticalOverlay = document.getElementById('tactical-canvas-overlay');
+  const cameraBadge = document.getElementById('camera-live-badge');
+  const canvas = document.getElementById('client-canvas');
+  const ctx = canvas.getContext('2d');
 
+  if (loader) loader.classList.remove('hidden');
+
+  try {
     if (clientVideoStream) {
       clientVideoStream.getTracks().forEach((track) => track.stop());
       clientVideoStream = null;
@@ -627,9 +737,42 @@ async function startDeviceCamera() {
     }
 
     clientVideoStream = stream;
+
+    // Configuración robusta para navegadores móviles y desktop
+    videoElem.muted = true;
+    videoElem.playsInline = true;
+    videoElem.autoplay = true;
+    videoElem.setAttribute('playsinline', '');
+    videoElem.setAttribute('webkit-playsinline', '');
     videoElem.srcObject = stream;
-    videoElem.style.display = 'none'; // Siempre oculto para ver el frame procesado por IA
-    await videoElem.play();
+
+    // VISIBILIDAD INMEDIATA: La cámara del usuario DEBE mostrarse sin demoras ni pantalla negra
+    videoElem.style.display = 'block';
+    videoElem.classList.add('active');
+    if (mainStream) mainStream.style.display = 'none';
+    if (tacticalOverlay) {
+      tacticalOverlay.style.display = 'block';
+      tacticalOverlay.classList.add('active');
+    }
+    if (cameraBadge) cameraBadge.style.display = 'flex';
+
+    await videoElem.play().catch((playErr) => {
+      console.warn("Auto-play requirió interacción:", playErr);
+    });
+
+    // Esperar a que el hardware de video inicialice dimensiones reales
+    if (videoElem.readyState < 2 || videoElem.videoWidth === 0) {
+      await new Promise((resolve) => {
+        const onReady = () => {
+          videoElem.removeEventListener('loadeddata', onReady);
+          videoElem.removeEventListener('canplay', onReady);
+          resolve();
+        };
+        videoElem.addEventListener('loadeddata', onReady, { once: true });
+        videoElem.addEventListener('canplay', onReady, { once: true });
+        setTimeout(resolve, 500);
+      });
+    }
 
     isCameraActive = true;
     if (loader) loader.classList.add('hidden');
@@ -655,7 +798,10 @@ async function startDeviceCamera() {
     const wsUplinkUrl = `${protocol}//${window.location.host}/ws/uplink`;
 
     try {
-      if (wsUplink) wsUplink.close();
+      if (wsUplink) {
+        wsUplink.close();
+        wsUplink = null;
+      }
       wsUplink = new WebSocket(wsUplinkUrl);
       wsUplink.binaryType = 'arraybuffer';
 
@@ -670,7 +816,8 @@ async function startDeviceCamera() {
             isCameraActive &&
             !isFlippingCamera
           ) {
-            // Throttling adaptativo: si el buffer de red aún transmite, descartar frame anterior para evitar lag
+            if (videoElem.readyState < 2 || videoElem.videoWidth === 0) return;
+            // Throttling adaptativo
             if (wsUplink.bufferedAmount > 0) return;
 
             ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
@@ -734,6 +881,32 @@ function stopDeviceCamera(fallbackToDemo = true) {
     clientVideoStream = null;
   }
 
+  const videoElem = document.getElementById('client-webcam');
+  const mainStream = document.getElementById('main-stream');
+  const tacticalOverlay = document.getElementById('tactical-canvas-overlay');
+  const cameraBadge = document.getElementById('camera-live-badge');
+
+  if (videoElem) {
+    videoElem.srcObject = null;
+    videoElem.style.display = 'none';
+    videoElem.classList.remove('active');
+  }
+
+  if (tacticalOverlay) {
+    tacticalOverlay.style.display = 'none';
+    tacticalOverlay.classList.remove('active');
+    const ctx = tacticalOverlay.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, tacticalOverlay.width, tacticalOverlay.height);
+  }
+
+  if (cameraBadge) cameraBadge.style.display = 'none';
+
+  // Reanudar visualización del video stream del servidor
+  if (mainStream) {
+    mainStream.style.display = 'block';
+    mainStream.src = `/api/stream?t=${Date.now()}`;
+  }
+
   const btnCam = document.getElementById('btn-toggle-camera');
   const btnText = document.getElementById('camera-btn-text');
   const iconElem = document.getElementById('camera-icon-lucide');
@@ -762,7 +935,6 @@ async function flipDeviceCamera() {
       clientVideoStream.getTracks().forEach((track) => track.stop());
       clientVideoStream = null;
     }
-    // Breve pausa para permitir que el SO móvil libere el bloqueo de hardware del sensor anterior
     await new Promise((resolve) => setTimeout(resolve, 180));
 
     const newStream = await navigator.mediaDevices.getUserMedia({
@@ -775,8 +947,13 @@ async function flipDeviceCamera() {
     });
 
     clientVideoStream = newStream;
+    videoElem.muted = true;
+    videoElem.playsInline = true;
+    videoElem.autoplay = true;
     videoElem.srcObject = newStream;
-    await videoElem.play();
+    videoElem.style.display = 'block';
+    videoElem.classList.add('active');
+    await videoElem.play().catch(() => {});
     showSystemToast(`Cámara lista: ${currentFacingMode === 'environment' ? 'Trasera' : 'Frontal'}`);
   } catch (err) {
     console.warn("Fallo alternando sensor de cámara:", err);

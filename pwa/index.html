@@ -23,7 +23,7 @@
   <script src="/static/lucide.min.js"></script>
 
   <!-- Hoja de Estilos Táctica Responsiva -->
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body class="tactical-body">
   <!-- Scanline y Grid de Fondo Cyber -->
@@ -92,8 +92,14 @@
           <div class="corner-reticle bottom-right"></div>
 
           <img id="main-stream" src="/api/stream" alt="Video Stream Inferencia IA" crossorigin="anonymous">
-          <video id="client-webcam" playsinline autoplay muted style="display: none;"></video>
+          <video id="client-webcam" playsinline webkit-playsinline autoplay muted style="display: none;"></video>
+          <canvas id="tactical-canvas-overlay" class="tactical-canvas-overlay" style="display: none;"></canvas>
           <canvas id="client-canvas" style="display: none;"></canvas>
+
+          <div class="camera-mode-badge" id="camera-live-badge" style="display: none;">
+            <span class="pulse-indicator"></span>
+            <span id="camera-live-text">CÁMARA LOCAL EN VIVO (IA UPLINK)</span>
+          </div>
 
           <div class="stream-placeholder" id="stream-loader">
             <div class="loader-spinner"></div>
@@ -338,6 +344,6 @@
   </main>
 
   <!-- Script Principal de la PWA -->
-  <script src="/static/app.js?v=4"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>

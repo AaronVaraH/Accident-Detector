@@ -44,6 +44,7 @@ captures/
 .cache/
 .pytest_cache/
 .vercel/
+Ultralytics/
 
 # IDEs
 .vscode/

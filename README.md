@@ -70,3 +70,13 @@ La PWA incluye:
 ## ⚙️ Configuración
 - Configurar coordenadas y líneas virtuales de calibración en `config/cameras.json`.
 - Configurar credenciales de Telegram/Twilio y umbrales en `.env` (a partir de `.env.example`).
+
+---
+
+## ☁️ Despliegue en la Nube (Render CI/CD)
+El proyecto cuenta con despliegue automatizado en la nube mediante **Docker** y **Render**:
+- Servidor web FastAPI, streaming en vivo y PWA empaquetados en un solo contenedor optimizado.
+- Auto-deploy al hacer `git push origin main`.
+- Para consultar estándares de desarrollo, límites de memoria RAM (512 MB Free), configuración de variables de entorno y prevención de cold starts, consulta la guía completa:
+  👉 **[Guía de Despliegue y Ciclo de Desarrollo (DEPLOYMENT.md)](DEPLOYMENT.md)**
+

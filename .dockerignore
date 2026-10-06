@@ -6,6 +6,8 @@ __pycache__
 *.pyc
 *.pt
 *.onnx
+!models/fire_smoke.pt
+!models/lighter_flame.onnx
 tests/video_samples/*.mp4
 tests/video_samples/*.avi
 .git

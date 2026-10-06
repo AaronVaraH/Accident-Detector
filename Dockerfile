@@ -3,7 +3,8 @@ FROM python:3.10-slim
 # Evitar prompts interactivos y buffers de Python
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    YOLO_CONFIG_DIR=/tmp/Ultralytics
 
 WORKDIR /app
 

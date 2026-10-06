@@ -167,10 +167,15 @@ class FireDetector:
         self.lighter_model_path = lighter_model_path
 
         if not Path(model_path).exists():
-            raise FileNotFoundError(f"No se encontró el modelo de fuego en {model_path}")
-
-        logger.info(f"Cargando detector de fuego/humo primario desde: {model_path}")
-        self.model = YOLO(model_path)
+            logger.warning(f"⚠️ No se encontró el modelo de fuego en {model_path}. Detección de fuego desactivada temporalmente.")
+            self.model = None
+        else:
+            try:
+                logger.info(f"Cargando detector de fuego/humo primario desde: {model_path}")
+                self.model = YOLO(model_path)
+            except Exception as e:
+                logger.error(f"Error cargando modelo de fuego {model_path}: {e}")
+                self.model = None
 
         self.lighter_model = None
         if Path(lighter_model_path).exists():
@@ -189,6 +194,9 @@ class FireDetector:
         - Descarta motion blur de manos mediante análisis cromático de piel humana.
         - Descarta reflejos de luz blanca en objetos claros mediante validación térmica (R vs B).
         """
+        if self.model is None:
+            return sv.Detections.empty(), []
+
         h, w = frame.shape[:2]
         boxes_list = []
         conf_list = []

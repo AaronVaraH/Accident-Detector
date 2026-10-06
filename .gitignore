@@ -1,0 +1,48 @@
+# Entornos virtuales
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Modelos y pesos pesados (se descargan automáticamente o se entrenan por separado)
+*.pt
+*.onnx
+!models/.gitkeep
+
+# Certificados SSL locales y claves privadas
+config/certs/*.pem
+config/certs/*.key
+*.key
+*.pem
+!config/certs/.gitkeep
+
+# Videos y muestras de prueba
+tests/video_samples/*.mp4
+tests/video_samples/*.avi
+tests/video_samples/*.mkv
+!tests/video_samples/.gitkeep
+
+# Variables de entorno y secretos
+.env
+*.env.local
+
+# Salidas y logs
+runs/
+logs/
+*.log
+captures/
+
+# Cache y temporales
+.cache/
+.pytest_cache/
+.vercel/
+
+# IDEs
+.vscode/
+.idea/

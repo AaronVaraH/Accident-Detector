@@ -1,0 +1,45 @@
+{
+  "name": "Accident & Fire Tactical Detector",
+  "short_name": "AccidentAI",
+  "description": "Sistema táctico de visión computacional para detección de accidentes vehiculares y conatos de incendio en tiempo real.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070a11",
+  "theme_color": "#00f0ff",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "security", "navigation"],
+  "shortcuts": [
+    {
+      "name": "Ver Stream en Vivo",
+      "url": "/#stream",
+      "description": "Acceso inmediato al monitor de video en vivo"
+    },
+    {
+      "name": "Cámara de Smartphone",
+      "url": "/#phone-camera",
+      "description": "Transmitir la cámara del móvil a la IA"
+    }
+  ]
+}

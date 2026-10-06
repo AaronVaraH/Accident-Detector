@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>TITAN // Tactical Incident & Fire Detector</title>
+  
+  <!-- Metadatos PWA y Tema -->
+  <meta name="theme-color" content="#070a11">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AccidentAI">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+
+  <!-- Tipografía Google Fonts Moderna -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Iconos Lucide Local (sin dependencia de CDN externa) -->
+  <script src="/static/lucide.min.js"></script>
+
+  <!-- Hoja de Estilos Táctica Responsiva -->
+  <link rel="stylesheet" href="/static/style.css?v=4">
+</head>
+<body class="tactical-body">
+  <!-- Scanline y Grid de Fondo Cyber -->
+  <div class="background-grid"></div>
+  <div class="scanlines-overlay"></div>
+
+  <!-- Header Táctico Superior -->
+  <header class="tactical-header">
+    <div class="header-brand">
+      <div class="radar-badge">
+        <span class="radar-ping"></span>
+        <i data-lucide="shield-alert" class="brand-icon"></i>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">TITAN <span class="highlight">VISION</span></h1>
+        <p class="brand-subtitle" id="i18n-sub">CENTRO TÁCTICO DE DETECCIÓN VIAL & INCENDIOS</p>
+      </div>
+    </div>
+
+    <!-- Acciones y Estado Limpio -->
+    <div class="header-actions">
+      <div class="header-status-pill" id="stream-status-pill">
+        <span class="status-dot"></span>
+        <span id="metric-fps">0.0</span> FPS
+      </div>
+
+      <!-- Selector de Idioma -->
+      <button class="action-btn btn-pill" id="btn-toggle-lang" title="Cambiar Idioma">
+        <i data-lucide="globe"></i>
+        <span id="current-lang-text">ES</span>
+      </button>
+
+      <!-- Mute/Unmute Alerta Sonora -->
+      <button class="action-btn btn-pill" id="btn-toggle-audio" title="Alarma Sonora">
+        <i data-lucide="volume-2" id="audio-icon-lucide"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal (Layout Responsivo Táctico Mobile-First) -->
+  <main class="tactical-layout">
+    <!-- SECCIÓN MONITOR: Visor de Video de Cámara -->
+    <section class="viewport-section">
+      <div class="tactical-frame" id="main-viewport-frame">
+        <!-- Banner de Emergencia / Incidente Flotante -->
+        <div class="emergency-banner" id="emergency-banner" style="display: none;">
+          <div class="emergency-pulse-glow"></div>
+          <div class="emergency-icon-wrap">
+            <i data-lucide="alert-triangle" class="emergency-icon-svg" id="banner-icon-lucide"></i>
+          </div>
+          <div class="emergency-content">
+            <h2 class="emergency-title" id="banner-title">SINIESTRO CONFIRMADO</h2>
+            <p class="emergency-subtitle" id="banner-subtitle">Desaceleración violenta detectada</p>
+          </div>
+          <button class="emergency-dismiss-btn" id="banner-dismiss" title="Reconocer alerta">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <!-- Elemento de Video Principal (MJPEG Stream & Cámara Móvil) -->
+        <div class="stream-container" id="stream-container">
+          <!-- Retículas esquineras tácticas (delimitadas exactamente al visor de cámara) -->
+          <div class="corner-reticle top-left"></div>
+          <div class="corner-reticle top-right"></div>
+          <div class="corner-reticle bottom-left"></div>
+          <div class="corner-reticle bottom-right"></div>
+
+          <img id="main-stream" src="/api/stream" alt="Video Stream Inferencia IA" crossorigin="anonymous">
+          <video id="client-webcam" playsinline autoplay muted style="display: none;"></video>
+          <canvas id="client-canvas" style="display: none;"></canvas>
+
+          <div class="stream-placeholder" id="stream-loader">
+            <div class="loader-spinner"></div>
+            <p id="i18n-connecting">INICIANDO CÁMARA & MOTOR DE INFERENCIA IA...</p>
+          </div>
+        </div>
+
+        <!-- Barra de Control del Monitor -->
+        <div class="viewport-toolbar">
+          <div class="toolbar-left">
+            <button class="control-btn" id="btn-toggle-camera" title="Activar / Detener Cámara">
+              <i data-lucide="camera" id="camera-icon-lucide"></i>
+              <span id="camera-btn-text">ACTIVAR CÁMARA</span>
+            </button>
+            <button class="control-btn btn-flip" id="btn-flip-camera" title="Cambiar cámara frontal / trasera">
+              <i data-lucide="switch-camera"></i>
+            </button>
+            <button class="control-btn" id="btn-pause-play" title="Pausar / Reanudar Stream">
+              <i data-lucide="pause" id="pause-icon-lucide"></i>
+              <span id="i18n-pause">PAUSAR</span>
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <div class="stream-stat">
+              <span class="stat-name" id="i18n-motion-lbl">ENERGÍA:</span>
+              <div class="stat-progress-bar">
+                <div class="progress-fill" id="motion-bar-fill" style="width: 5%;"></div>
+              </div>
+              <span class="stat-value" id="motion-val">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN CONTROLES Y TELEMETRÍA (MOBILE FIRST) -->
+    <aside class="dashboard-section">
+      <!-- Tarjetas de Métricas en Vivo (6 Tarjetas Limpias sin badges invasivas) -->
+      <div class="metrics-grid">
+        <!-- Métrica 1: Vehículos -->
+        <div class="metric-card metric-vehicles">
+          <div class="card-icon"><i data-lucide="car"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-veh">VEHÍCULOS</div>
+            <div class="card-value" id="metric-vehicles-count">0</div>
+          </div>
+        </div>
+
+        <!-- Métrica 2: Peatones -->
+        <div class="metric-card metric-persons">
+          <div class="card-icon"><i data-lucide="users"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-ped">PEATONES</div>
+            <div class="card-value" id="metric-persons-count">0</div>
+          </div>
+        </div>
+
+        <!-- Métrica 3: Fuego -->
+        <div class="metric-card metric-fire" id="card-fire">
+          <div class="card-icon"><i data-lucide="flame"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-fire">FUEGO</div>
+            <div class="card-value" id="metric-fire-status">0</div>
+          </div>
+        </div>
+
+        <!-- Métrica 4: Humo -->
+        <div class="metric-card metric-smoke" id="card-smoke">
+          <div class="card-icon"><i data-lucide="cloud"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-smoke">HUMO</div>
+            <div class="card-value" id="metric-smoke-status">0</div>
+          </div>
+        </div>
+
+        <!-- Métrica 5: Siniestros -->
+        <div class="metric-card metric-incidents" id="card-incidents">
+          <div class="card-icon"><i data-lucide="shield-alert"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-inc">SINIESTROS</div>
+            <div class="card-value" id="metric-incidents-count">0</div>
+          </div>
+        </div>
+
+        <!-- Métrica 6: Placas Detectadas -->
+        <div class="metric-card metric-plates" id="card-plates">
+          <div class="card-icon"><i data-lucide="scan-line"></i></div>
+          <div class="card-info">
+            <div class="card-title" id="i18n-card-plates">PLACAS (ALPR)</div>
+            <div class="card-value" id="metric-plates-count">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel de Configuración y Sensibilidad (Sin selector de video innecesario) -->
+      <div class="control-panel">
+        <h3 class="panel-heading">
+          <i data-lucide="sliders" class="panel-icon-svg"></i>
+          <span id="i18n-ctrl-title">CONFIGURACIÓN & SENSIBILIDAD</span>
+        </h3>
+
+        <div class="sliders-group">
+          <!-- Slider Sensibilidad Vehículos -->
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span id="i18n-vehicle-sens">Sensibilidad de Vehículos:</span>
+              <span class="slider-val" id="vehicle-conf-val">0.28</span>
+            </div>
+            <input type="range" min="0.10" max="0.80" step="0.02" value="0.28" id="slider-vehicle-conf" class="tactical-slider">
+          </div>
+          <!-- Slider Sensibilidad Fuego -->
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span id="i18n-fire-sens">Sensibilidad de Fuego:</span>
+              <span class="slider-val" id="fire-conf-val">0.15</span>
+            </div>
+            <input type="range" min="0.05" max="0.80" step="0.02" value="0.15" id="slider-fire-conf" class="tactical-slider">
+          </div>
+          <!-- Slider Sensibilidad Humo -->
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <span id="i18n-smoke-sens">Sensibilidad de Humo:</span>
+              <span class="slider-val" id="smoke-conf-val">0.22</span>
+            </div>
+            <input type="range" min="0.05" max="0.80" step="0.02" value="0.22" id="slider-smoke-conf" class="tactical-slider">
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel de Detección & Consulta de Placas (ALPR & APIs) -->
+      <div class="plates-panel">
+        <div class="panel-header-split">
+          <h3 class="panel-heading">
+            <i data-lucide="credit-card" class="panel-icon-svg"></i>
+            <span id="i18n-plates-title">CONSULTA VEHICULAR & PLACAS</span>
+          </h3>
+          <span class="alpr-model-tag">vehicle-registration-plates-trudk/2</span>
+        </div>
+
+        <!-- Barra de búsqueda y consulta directa de API -->
+        <div class="plate-search-box">
+          <div class="search-input-wrapper">
+            <i data-lucide="search" class="search-icon-svg"></i>
+            <input type="text" id="plate-search-input" placeholder="Ej: ABC-1234, XYZ-789-A..." class="tactical-input">
+          </div>
+          <button class="action-btn btn-search" id="btn-search-plate">CONSULTAR</button>
+          <label class="action-btn btn-upload" title="Subir foto para detectar placas con Roboflow">
+            <i data-lucide="camera"></i>
+            <span>FOTO</span>
+            <input type="file" id="plate-file-input" accept="image/*" style="display:none;">
+          </label>
+        </div>
+
+        <!-- Tarjeta de Expediente de Vehículo Consultado -->
+        <div class="vehicle-dossier" id="vehicle-dossier" style="display: none;">
+          <div class="dossier-header">
+            <div class="dossier-plate-badge" id="dossier-plate">---</div>
+            <div class="dossier-status" id="dossier-stolen">SIN REPORTE</div>
+          </div>
+          <div class="dossier-grid">
+            <div class="dossier-item"><span class="lbl">Marca / Modelo:</span> <strong id="dossier-make-model">---</strong></div>
+            <div class="dossier-item"><span class="lbl">Año / Color:</span> <strong id="dossier-year-color">---</strong></div>
+            <div class="dossier-item"><span class="lbl">Combustible:</span> <strong id="dossier-fuel" class="fuel-badge">---</strong></div>
+            <div class="dossier-item"><span class="lbl">Jurisdicción:</span> <strong id="dossier-jurisdiction">---</strong></div>
+          </div>
+          <div class="dossier-alert" id="dossier-hazmat-alert" style="display: none;"></div>
+        </div>
+
+        <!-- Feed de Placas Detectadas en Vivo -->
+        <div class="recent-plates-header">
+          <span class="sub-label">PLACAS RECIENTES EN ESCENA:</span>
+          <span class="recent-plates-count" id="plates-live-count">0</span>
+        </div>
+        <div class="recent-plates-feed" id="recent-plates-feed">
+          <div class="empty-state">No se han detectado placas aún en la escena.</div>
+        </div>
+      </div>
+
+      <!-- Panel de Enriquecimiento Ambiental & Geográfico -->
+      <div class="enrichment-panel">
+        <h3 class="panel-heading">
+          <i data-lucide="cloud-sun" class="panel-icon-svg"></i>
+          <span id="i18n-enrich-title">CONTEXTO SITUACIONAL (APIs)</span>
+        </h3>
+        <div class="enrichment-grid">
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="map-pin"></i> Ubicación:</span>
+            <span class="enrich-val" id="enrich-location">Cargando...</span>
+          </div>
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="thermometer"></i> Clima:</span>
+            <span class="enrich-val" id="enrich-temp">--°C</span>
+          </div>
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="wind"></i> Viento:</span>
+            <span class="enrich-val" id="enrich-wind">-- km/h</span>
+          </div>
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="gauge"></i> Pavimento:</span>
+            <span class="enrich-val" id="enrich-pavement">SECO</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de Entidades en Tránsito (Rastreo en Tiempo Real) -->
+      <div class="entities-panel">
+        <div class="panel-header-split">
+          <div>
+            <h3 class="panel-heading">
+              <i data-lucide="crosshair" class="panel-icon-svg"></i>
+              <span id="i18n-tracking-title">ENTIDADES EN RASTREO ACTIVO</span>
+            </h3>
+            <p class="panel-desc">Vehículos y peatones en el encuadre en tiempo real.</p>
+          </div>
+          <span class="entities-counter" id="active-tracked-count">0 activas</span>
+        </div>
+        <div class="entities-chips-container" id="entities-list">
+          <div class="empty-state" id="i18n-no-entities">Buscando entidades en el campo visual...</div>
+        </div>
+      </div>
+
+      <!-- Caja Negra: Bitácora Forense de Siniestros (Historial Permanente) -->
+      <div class="blackbox-panel">
+        <div class="panel-header-split">
+          <div>
+            <h3 class="panel-heading">
+              <i data-lucide="clipboard-list" class="panel-icon-svg"></i>
+              <span id="i18n-blackbox-title">REGISTRO DE SINIESTROS & ALARMAS</span>
+            </h3>
+            <p class="panel-desc">Historial forense inmutable de choques y conatos con placas asociadas.</p>
+          </div>
+          <button class="mini-btn" id="btn-clear-log" title="Limpiar bitácora visual">
+            <i data-lucide="trash-2"></i>
+            <span>LIMPIAR</span>
+          </button>
+        </div>
+        <div class="incident-timeline" id="incident-timeline">
+          <div class="empty-state" id="i18n-no-incidents">Sin anomalías críticas registradas. Sistema seguro.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Script Principal de la PWA -->
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>

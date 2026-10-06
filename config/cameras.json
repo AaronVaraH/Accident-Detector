@@ -1,0 +1,22 @@
+{
+  "camera_01": {
+    "id": "CAM-01",
+    "name": "Cámara Vial - Acceso Principal",
+    "location": {
+      "latitude": 19.432608,
+      "longitude": -99.133209,
+      "address_hint": "Av. Principal y Cruce Periférico"
+    },
+    "calibration": {
+      "distance_meters": 15.0,
+      "line_a": {
+        "start": [150, 380],
+        "end": [1150, 380]
+      },
+      "line_b": {
+        "start": [100, 600],
+        "end": [1200, 600]
+      }
+    }
+  }
+}

@@ -226,9 +226,10 @@ class PipelineManager:
         cached_entity_detections = None
 
         current_source_cached = self.source
+        stream_gen = stream.read_frames() if stream else None
 
         def get_next_frame():
-            nonlocal frame_idx
+            nonlocal frame_idx, stream_gen
             if self.is_client_camera:
                 signaled = self._client_frame_event.wait(timeout=0.30)
                 if not signaled:
@@ -241,11 +242,14 @@ class PipelineManager:
                     return frame_idx, self._client_frame_buffer
                 return None, None
             else:
-                if stream is None:
+                if stream_gen is None:
                     return None, None
-                for f_idx, f in stream.read_frames():
+                try:
+                    f_idx, f = next(stream_gen)
+                    frame_idx = f_idx
                     return f_idx, f
-                return None, None
+                except (StopIteration, Exception):
+                    return None, None
 
         while self.is_running and (self.source == current_source_cached):
             if self.is_paused:
@@ -289,7 +293,12 @@ class PipelineManager:
                 # Si es un video local terminado, reiniciar bucle
                 if stream and not is_webcam and not is_client:
                     stream.release()
-                    stream = VideoStream(source=self.source)
+                    try:
+                        stream = VideoStream(source=self.source)
+                        stream_gen = stream.read_frames()
+                    except Exception as loop_err:
+                        logger.warning(f"Error reiniciando video {self.source}: {loop_err}")
+                        time.sleep(1.0)
                     continue
                 time.sleep(0.03)
                 continue

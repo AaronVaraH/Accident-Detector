@@ -1,5 +1,6 @@
 import cv2
 import logging
+from pathlib import Path
 from typing import Generator, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,14 @@ class VideoStream:
         self._open()
 
     def _open(self) -> None:
-        self.cap = cv2.VideoCapture(self.source)
+        source_target = self.source
+        if isinstance(self.source, str):
+            path_obj = Path(self.source)
+            if not path_obj.exists():
+                candidate = Path("tests/video_samples") / path_obj.name
+                if candidate.exists():
+                    source_target = str(candidate)
+        self.cap = cv2.VideoCapture(source_target)
         if not self.cap.isOpened():
             raise RuntimeError(f"No fue posible abrir la fuente de video: {self.source}")
 

@@ -477,17 +477,46 @@ function renderVehicleDossier(data) {
   if (window.lucide) lucide.createIcons();
 }
 
+// Variable global para coordenadas obtenidas por GPS en el navegador
+let userCoords = null;
+
+function requestUserLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userCoords = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude
+        };
+        console.log('[GPS] Ubicación física autorizada por usuario:', userCoords);
+        loadSituationalContext();
+      },
+      (err) => {
+        console.warn('[GPS] Permiso de ubicación no concedido o no disponible:', err.message);
+        loadSituationalContext();
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  } else {
+    loadSituationalContext();
+  }
+}
+
 // Consulta de Contexto Situacional (Clima & Ubicación)
 async function loadSituationalContext() {
   try {
-    const res = await fetch('/api/enrichment/context');
+    const query = userCoords ? `?lat=${userCoords.lat}&lon=${userCoords.lon}` : '';
+    const res = await fetch(`/api/enrichment/context${query}`);
     if (res.ok) {
       const data = await res.json();
       const w = data.weather || {};
       const loc = data.location || {};
 
       const locElem = document.getElementById('enrich-location');
-      if (locElem) locElem.textContent = loc.street || loc.address || 'CDMX';
+      if (locElem) {
+        locElem.textContent = loc.street || loc.city || loc.address || 'Ubicación activa';
+        locElem.title = loc.address || '';
+      }
 
       const tempElem = document.getElementById('enrich-temp');
       if (tempElem && w.temperature_c !== undefined) tempElem.textContent = `${w.temperature_c}°C (${w.description || 'Despejado'})`;
@@ -1333,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnText) btnText.textContent = I18N_DICTIONARY[currentLang].camera_stopped || "ACTIVAR CÁMARA";
 
   connectTelemetryWebSocket();
-  loadSituationalContext();
+  requestUserLocation();
   setInterval(loadIncidentsHistory, 5000);
   setInterval(loadSituationalContext, 30000);
   // Cargar una placa de demostración en el expediente

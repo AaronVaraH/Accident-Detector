@@ -368,24 +368,33 @@ async def post_detect_plate(request: Request, payload: Optional[PlateDetectPaylo
 # --- Endpoints de Enriquecimiento y Contexto Situacional ---
 
 @app.get("/api/enrichment/weather")
-def get_weather():
+def get_weather(lat: Optional[float] = None, lon: Optional[float] = None):
     """Consulta la meteorología de la zona donde está ubicada la cámara."""
-    data = weather_service.get_weather()
+    kwargs = {}
+    if lat is not None and lon is not None:
+        kwargs = {"lat": lat, "lon": lon}
+    data = weather_service.get_weather(**kwargs)
     return JSONResponse(content=data)
 
 
 @app.get("/api/enrichment/location")
-def get_location():
+def get_location(lat: Optional[float] = None, lon: Optional[float] = None):
     """Consulta la ubicación física y geocodificación inversa de la cámara."""
-    data = location_service.get_location()
+    kwargs = {}
+    if lat is not None and lon is not None:
+        kwargs = {"lat": lat, "lon": lon}
+    data = location_service.get_location(**kwargs)
     return JSONResponse(content=data)
 
 
 @app.get("/api/enrichment/context")
-def get_situational_context():
+def get_situational_context(lat: Optional[float] = None, lon: Optional[float] = None):
     """Consulta el expediente situacional consolidado (clima, ubicación y placas detectadas)."""
-    weather = weather_service.get_weather()
-    location = location_service.get_location()
+    kwargs = {}
+    if lat is not None and lon is not None:
+        kwargs = {"lat": lat, "lon": lon}
+    weather = weather_service.get_weather(**kwargs)
+    location = location_service.get_location(**kwargs)
     recent_plates = license_plate_detector.get_recent_plates(limit=10)
     return JSONResponse(content={
         "timestamp": datetime.now().isoformat(),
@@ -482,4 +491,4 @@ if __name__ == "__main__":
         else:
             print("⚠️ No se encontraron certificados en config/certs. Arrancando en HTTP...")
 
-    uvicorn.run("server:app", host="0.0.0.0", port=args.port, reload=False, log_level="warning", **ssl_kwargs)
+    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="info", **ssl_kwargs)

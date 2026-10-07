@@ -32,10 +32,10 @@ CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.28"))
 IOU_THRESHOLD = float(os.getenv("IOU_THRESHOLD", "0.50"))
 
 # --- Roboflow Inference Model IDs ---
-ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "")
-MODEL_ID_VEHICULOS = os.getenv("MODEL_ID_VEHICULOS", "")
-MODEL_ID_PLACAS = os.getenv("MODEL_ID_PLACAS", "vehicle-registration-plates-trudk/2")
-MODEL_ID_FUEGO = os.getenv("MODEL_ID_FUEGO", "")
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "moEFeCNxkkmLAaSBo2dr").strip("\"'")
+MODEL_ID_VEHICULOS = os.getenv("MODEL_ID_VEHICULOS", "vehicle-qq0yh/2").strip("\"'")
+MODEL_ID_PLACAS = os.getenv("MODEL_ID_PLACAS", "vehicle-registration-plates-trudk/2").strip("\"'")
+MODEL_ID_FUEGO = os.getenv("MODEL_ID_FUEGO", "fire-detection-for-khkt/3").strip("\"'")
 
 # Clases COCO estándar correspondientes a vehículos (si se usa YOLOv8 local)
 # 2: car, 3: motorcycle, 5: bus, 7: truck
@@ -51,13 +51,13 @@ INCIDENT_COOLDOWN_SECONDS = int(os.getenv("INCIDENT_COOLDOWN_SECONDS", "10"))  #
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip("\"'")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip("\"'")
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip("\"'")
-TWILIO_API_KEY = os.getenv("TWILIO_API_KEY", "").strip("\"'")
-TWILIO_API_SECRET = os.getenv("TWILIO_API_SECRET", "").strip("\"'")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip("\"'")
-TWILIO_FROM_PHONE = os.getenv("TWILIO_FROM_PHONE", "").strip("\"'")
-TWILIO_TO_PHONE = os.getenv("TWILIO_TO_PHONE", "").strip("\"'")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "ACf8083ce67d0561192959ccb3e0404ba9").strip("\"'")
+TWILIO_API_KEY = os.getenv("TWILIO_API_KEY", "SK3c9ba33a6ce18c9ba5899954ec26118f").strip("\"'")
+TWILIO_API_SECRET = os.getenv("TWILIO_API_SECRET", "P4TVK2hshIUKLfHtHRfvkYjW4qFfsQ0J").strip("\"'")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "P4TVK2hshIUKLfHtHRfvkYjW4qFfsQ0J").strip("\"'")
+TWILIO_FROM_PHONE = os.getenv("TWILIO_FROM_PHONE", "+12187874837").strip("\"'")
+TWILIO_TO_PHONE = os.getenv("TWILIO_TO_PHONE", "+526142284522").strip("\"'")
 
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "").strip("\"'")
-MAPS_API_KEY = os.getenv("MAPS_API_KEY", "").strip("\"'")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip("\"'")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "1d02888ced53939cfb4ad98524afabf3").strip("\"'")
+MAPS_API_KEY = os.getenv("MAPS_API_KEY", "AIzaSyCLf2qNzSxdkC3oHBhII4SOs4hr2d4FQno").strip("\"'")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "3e7c63042dmshbeb5ebcd95d91a8p12d05cjsn05dae14f16ea").strip("\"'")

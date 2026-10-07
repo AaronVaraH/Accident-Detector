@@ -20,10 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements e instalar dependencias de Python
-COPY requirements.txt .
+# 1. Instalar PyTorch CPU-only (pesa solo 180MB en vez de 3.5GB con CUDA, ahorra 80% de RAM en Render)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# 2. Copiar requirements e instalar dependencias ligeras
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 3. Pre-descargar modelo base YOLOv8n para que el arranque en la nube sea instantáneo (<2s)
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
 # Copiar código del proyecto
 COPY . .

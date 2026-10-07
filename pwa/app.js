@@ -84,7 +84,7 @@ let audioContext = null;
 // --- 2. Registro del Service Worker y PWA Install Prompt ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('/sw.js?v=8')
       .then((reg) => console.log('[PWA] Service Worker registrado:', reg.scope))
       .catch((err) => console.warn('[PWA] Fallo al registrar Service Worker:', err));
   });
@@ -109,8 +109,18 @@ if (btnInstall) {
   });
 }
 
-// --- 3. Motor de Audio Sintetizado (Web Audio API) ---
+// --- 3. Motor de Audio (Alarma Sonora Personalizada & Web Audio Fallback) ---
+let alarmAudio = null;
+
 function initAudio() {
+  if (!alarmAudio) {
+    try {
+      alarmAudio = new Audio('/static/alarma.mp3');
+      alarmAudio.preload = 'auto';
+    } catch (e) {
+      console.warn("[Audio] Error instanciando Audio:", e);
+    }
+  }
   if (!audioContext) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
@@ -121,6 +131,10 @@ function initAudio() {
     audioContext.resume();
   }
 }
+
+// Desbloquear contexto de audio con la primera interacción del usuario
+window.addEventListener('click', () => { initAudio(); }, { once: true });
+window.addEventListener('touchstart', () => { initAudio(); }, { once: true });
 
 function playTacticalChirp() {
   if (!isAudioEnabled) return;
@@ -143,11 +157,8 @@ function playTacticalChirp() {
   osc.stop(audioContext.currentTime + 0.09);
 }
 
-function playEmergencySiren() {
-  if (!isAudioEnabled) return;
-  initAudio();
+function playSynthesizedSirenFallback() {
   if (!audioContext) return;
-
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
   osc.type = 'sawtooth';
@@ -166,6 +177,32 @@ function playEmergencySiren() {
 
   osc.start();
   osc.stop(now + 0.52);
+}
+
+function playEmergencySiren() {
+  if (!isAudioEnabled) return;
+  initAudio();
+
+  let playedCustom = false;
+  if (alarmAudio) {
+    try {
+      alarmAudio.currentTime = 0;
+      const playPromise = alarmAudio.play();
+      if (playPromise !== undefined) {
+        playedCustom = true;
+        playPromise.catch((err) => {
+          console.warn("[Audio] Falló reproducción de Alarma.mp3, usando sintetizador fallback:", err);
+          playSynthesizedSirenFallback();
+        });
+      }
+    } catch (e) {
+      console.warn("[Audio] Error al reproducir Alarma.mp3:", e);
+    }
+  }
+
+  if (!playedCustom) {
+    playSynthesizedSirenFallback();
+  }
 
   // Vibración háptica en móviles si está disponible
   if ('vibrate' in navigator) {

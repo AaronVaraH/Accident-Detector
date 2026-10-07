@@ -40,6 +40,47 @@
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  /* Estándar W3C para scrollbars finos y tácticos */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.32) rgba(6, 10, 18, 0.85);
+}
+
+/* =====================================================================
+   SCROLLBAR TÁCTICO CYBERPUNK (CROSS-BROWSER)
+   Homogéneo con el tema oscuro, neon cyan, bordes sutiles y glow
+===================================================================== */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(6, 10, 18, 0.85);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.28);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 240, 255, 0.15);
+  transition: all 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.58);
+  border-color: var(--cyan-primary);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4), inset 0 0 6px rgba(0, 240, 255, 0.3);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--cyan-primary);
+  border-color: #ffffff;
+  box-shadow: 0 0 14px var(--cyan-primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: rgba(6, 10, 18, 0.95);
 }
 
 body.tactical-body {
@@ -328,16 +369,6 @@ svg.lucide, [data-lucide] {
   flex-direction: column;
   gap: 0.85rem;
   box-sizing: border-box;
-}
-
-@media (min-width: 1024px) {
-  .tactical-layout {
-    max-width: 1560px;
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(380px, 1fr);
-    gap: 1.25rem;
-    padding: 1.25rem;
-  }
 }
 
 /* =====================================================================
@@ -1406,7 +1437,7 @@ svg.lucide, [data-lucide] {
 /* =====================================================================
    RESPONSIVIDAD Y MEDIA QUERIES (MÓVIL, TABLET, DESKTOP)
 ===================================================================== */
-@media (max-width: 1080px) {
+@media (max-width: 1023px) {
   .tactical-layout {
     grid-template-columns: 100%;
     padding: 0.85rem;
@@ -1599,3 +1630,224 @@ svg.lucide, [data-lucide] {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
 }
+
+/* =====================================================================
+   OPTIMIZACIONES RESPONSIVAS EXCLUSIVAS PARA ESCRITORIO (DESKTOP)
+   Diseño simétrico, sin desbordamientos, cards proporcionadas
+===================================================================== */
+@media (min-width: 1024px) {
+  /* Contenedor principal de escritorio: 2 columnas proporcionales */
+  .tactical-layout {
+    width: 100%;
+    max-width: 1680px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(520px, 1.35fr);
+    gap: 1.25rem;
+    padding: 1rem 1.25rem 2rem;
+    box-sizing: border-box;
+    align-items: start;
+  }
+
+  /* Monitor de cámara sticky y delimitado sin deformaciones */
+  .viewport-section {
+    position: sticky;
+    top: calc(var(--header-height) + 0.85rem);
+    align-self: start;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Dashboard organizado en grid simétrico */
+  .dashboard-section {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    align-items: stretch;
+  }
+
+  /* FILA 1: Métricas 3x2 completamente simétricas y sin desborde */
+  .metrics-grid {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.65rem !important;
+    width: 100%;
+  }
+
+  .metric-card {
+    min-width: 0 !important;
+    padding: 0.65rem 0.85rem !important;
+    border-radius: 8px !important;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem !important;
+    overflow: hidden !important;
+  }
+
+  .metric-card .card-icon {
+    flex-shrink: 0 !important;
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 1.2rem !important;
+  }
+
+  .metric-card .card-info {
+    min-width: 0 !important;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .metric-card .card-title {
+    font-size: 0.64rem !important;
+    letter-spacing: 0.6px !important;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .metric-card .card-value {
+    font-size: 1.35rem !important;
+    margin-top: 0.05rem !important;
+    line-height: 1.1;
+  }
+
+  /* FILA 2: Controles de Sensibilidad (Col 1) y Contexto Situacional (Col 2) - Misma altura */
+  .control-panel {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between;
+  }
+
+  .sliders-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem !important;
+    padding-top: 0.35rem !important;
+  }
+
+  .enrichment-panel {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .enrichment-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem !important;
+    height: 100%;
+  }
+
+  .enrich-item {
+    padding: 0.45rem 0.65rem !important;
+  }
+
+  /* FILA 3: Consulta Vehicular & Placas (Ancho completo para evitar recortes) */
+  .plates-panel {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+  }
+
+  .plate-search-box {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.6rem !important;
+    width: 100% !important;
+  }
+
+  .search-input-wrapper {
+    flex: 1 !important;
+    min-width: 180px !important;
+  }
+
+  .plate-search-box .btn-search,
+  .plate-search-box .btn-upload {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 0.48rem 0.95rem !important;
+  }
+
+  .dossier-header {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    flex-wrap: wrap !important;
+  }
+
+  .dossier-plate-badge {
+    white-space: nowrap !important;
+    letter-spacing: 2px !important;
+    font-size: 1.15rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dossier-status {
+    white-space: nowrap !important;
+    font-size: 0.75rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dossier-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.65rem !important;
+  }
+
+  .recent-plates-feed {
+    max-height: 120px !important;
+  }
+
+  /* FILA 4: Entidades en Rastreo (Col 1) y Registro de Siniestros (Col 2) - Misma altura */
+  .entities-panel {
+    grid-column: 1;
+    grid-row: 4;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .blackbox-panel {
+    grid-column: 2;
+    grid-row: 4;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .entities-chips-container {
+    height: 130px !important;
+    max-height: 130px !important;
+    overflow-y: auto !important;
+  }
+
+  .incident-timeline {
+    height: 130px !important;
+    max-height: 130px !important;
+    overflow-y: auto !important;
+  }
+
+  /* Estilos generales y simetría de paneles */
+  .control-panel, .entities-panel, .blackbox-panel, .plates-panel, .enrichment-panel {
+    padding: 0.85rem 1rem !important;
+    border-radius: 10px !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+  }
+
+  .panel-heading {
+    font-size: 0.76rem !important;
+    margin-bottom: 0.55rem !important;
+  }
+}
+

@@ -4,7 +4,7 @@
  * y despacho de notificaciones del sistema (Push / Web Notifications).
  */
 
-const CACHE_NAME = 'accident-detector-pwa-v5';
+const CACHE_NAME = 'accident-detector-pwa-v8';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -13,7 +13,8 @@ const ASSETS_TO_CACHE = [
   '/static/lucide.min.js',
   '/static/icon.svg',
   '/static/icon-192.png',
-  '/static/icon-512.png'
+  '/static/icon-512.png',
+  '/static/alarma.mp3'
 ];
 
 self.addEventListener('install', (event) => {

@@ -38,7 +38,7 @@ class VehicleDetector:
             conf=self.conf_threshold,
             classes=self.classes,
             device=settings.DEVICE,
-            imgsz=480,
+            imgsz=384,
             verbose=False,
         )[0]
 
@@ -203,7 +203,7 @@ class FireDetector:
             source=frame,
             conf=min_conf,
             device=settings.DEVICE,
-            imgsz=480,
+            imgsz=384,
             verbose=False,
         )[0]
 
@@ -241,7 +241,7 @@ class FireDetector:
         has_fire = any(cid == 1 for cid in class_ids_list)
         if not has_fire and self.enable_focal_lighter and self.lighter_model is not None:
             l_conf_thresh = min(0.25, self.fire_conf)
-            l_res = self.lighter_model(frame, conf=l_conf_thresh, imgsz=640, verbose=False)[0]
+            l_res = self.lighter_model(frame, conf=l_conf_thresh, imgsz=384, verbose=False)[0]
             for lb in l_res.boxes:
                 lname = self.lighter_model.names[int(lb.cls[0])].lower()
                 lconf = float(lb.conf[0])

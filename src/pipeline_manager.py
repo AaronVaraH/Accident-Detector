@@ -223,6 +223,7 @@ class PipelineManager:
 
         cached_fire_detections = sv.Detections.empty()
         cached_fire_labels = []
+        cached_entity_detections = None
 
         current_source_cached = self.source
 
@@ -310,16 +311,20 @@ class PipelineManager:
             raw_energy, motion_boxes = self.motion_analyzer.update(frame)
             motion_energy = float(raw_energy)
 
-            # 2. Detección vehicular y humana
-            entity_detections = self.vehicle_detector.detect(frame)
+            # 2. Detección vehicular y humana con motion gate adaptativo
+            if motion_energy < 0.035 and f_idx % 2 != 0 and cached_entity_detections is not None:
+                entity_detections = cached_entity_detections
+            else:
+                entity_detections = self.vehicle_detector.detect(frame)
+                cached_entity_detections = entity_detections
 
             # 3. Tracking y cinemática
             tracked_entities, kinematic_anomalies = kinematics_tracker.update(
                 entity_detections, f_idx, timestamp=now
             )
 
-            # 4. Fuego y Humo (Inferencia cadenciada cada 2 frames para alta velocidad en CPU)
-            if f_idx % 2 == 0 or cached_fire_detections is None:
+            # 4. Fuego y Humo (Inferencia cadenciada cada 3 frames para alta velocidad en CPU)
+            if f_idx % 3 == 0 or cached_fire_detections is None:
                 cached_fire_detections, cached_fire_labels = self.fire_detector.detect(frame)
             fire_detections, fire_labels = cached_fire_detections, cached_fire_labels
 
@@ -437,7 +442,7 @@ class PipelineManager:
                     telemetry_entities.append(entity_info)
 
             # Escaneo periódico directo de placas si no hay vehículos o es cámara móvil/webcam
-            if (vehicles_count == 0 or is_client or is_webcam) and (f_idx % 6 == 0 or f_idx <= 2):
+            if (vehicles_count == 0 or is_client or is_webcam) and (f_idx % 45 == 0 or f_idx <= 2):
                 license_plate_detector.enqueue_full_frame(frame)
 
             # Dibujar placas detectadas en la escena general

@@ -175,6 +175,21 @@ function playEmergencySiren() {
 
 // --- 4. Enlace de Telemetría Táctica (WebSocket + HTTP Polling Fallback) ---
 let httpTelemetryInterval = null;
+let pendingTelemetry = null;
+let telemetryRafId = null;
+
+function handleTelemetryIncoming(data) {
+  pendingTelemetry = data;
+  if (!telemetryRafId) {
+    telemetryRafId = requestAnimationFrame(() => {
+      telemetryRafId = null;
+      if (pendingTelemetry) {
+        updateTelemetryUI(pendingTelemetry);
+        pendingTelemetry = null;
+      }
+    });
+  }
+}
 
 function startHttpTelemetryPolling() {
   if (httpTelemetryInterval) return;
@@ -183,13 +198,13 @@ function startHttpTelemetryPolling() {
       const res = await fetch('/api/status');
       if (res.ok) {
         const data = await res.json();
-        updateTelemetryUI(data);
+        handleTelemetryIncoming(data);
         document.getElementById('stream-loader').classList.add('hidden');
       }
     } catch (e) {
       console.debug('[HTTP Telemetry] Esperando enlace...');
     }
-  }, 400);
+  }, 1000); // 1000ms evita saturar la red mientras se conecta el WebSocket
 }
 
 function stopHttpTelemetryPolling() {
@@ -220,7 +235,7 @@ function connectTelemetryWebSocket() {
     wsTelemetry.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        updateTelemetryUI(data);
+        handleTelemetryIncoming(data);
       } catch (err) {
         console.error('[WS] Error parseando telemetría:', err);
       }
@@ -326,28 +341,37 @@ function updateTelemetryUI(data) {
   const motionBarElem = document.getElementById('motion-bar-fill');
   if (motionBarElem) motionBarElem.style.width = `${Math.max(5, motionPct)}%`;
 
-  // Banner de Alerta Activa
+  // Banner de Alerta Activa con control de estado (evita re-renderizado repetitivo)
   const banner = document.getElementById('emergency-banner');
   if (banner) {
     if (data.active_alert) {
-      banner.style.display = 'flex';
-      const titleElem = document.getElementById('banner-title');
-      if (titleElem) titleElem.textContent = data.active_alert.title || "ALERTA CONFIRMADA";
-      const subElem = document.getElementById('banner-subtitle');
-      if (subElem) subElem.textContent = data.active_alert.subtitle || "";
-      const bannerIcon = document.getElementById('banner-icon-lucide');
-      if (bannerIcon) {
-        bannerIcon.setAttribute('data-lucide', data.active_alert.is_smoke ? 'wind' : 'alert-triangle');
+      const alertKey = `${data.active_alert.title}|${data.active_alert.subtitle}|${data.active_alert.is_smoke}`;
+      if (banner.dataset.lastAlert !== alertKey) {
+        banner.dataset.lastAlert = alertKey;
+        banner.style.display = 'flex';
+        const titleElem = document.getElementById('banner-title');
+        if (titleElem) titleElem.textContent = data.active_alert.title || "ALERTA CONFIRMADA";
+        const subElem = document.getElementById('banner-subtitle');
+        if (subElem) subElem.textContent = data.active_alert.subtitle || "";
+        const bannerIcon = document.getElementById('banner-icon-lucide');
+        if (bannerIcon) {
+          bannerIcon.setAttribute('data-lucide', data.active_alert.is_smoke ? 'wind' : 'alert-triangle');
+          if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons({ root: banner });
+          }
+        }
+        if (data.active_alert.is_smoke) {
+          banner.classList.add('smoke-only');
+        } else {
+          banner.classList.remove('smoke-only');
+        }
+        playEmergencySiren();
       }
-      if (data.active_alert.is_smoke) {
-        banner.classList.add('smoke-only');
-      } else {
-        banner.classList.remove('smoke-only');
-      }
-      if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-      playEmergencySiren();
     } else {
-      banner.style.display = 'none';
+      if (banner.dataset.lastAlert) {
+        banner.style.display = 'none';
+        delete banner.dataset.lastAlert;
+      }
     }
   }
 
@@ -358,6 +382,14 @@ function updateTelemetryUI(data) {
   drawTacticalOverlay(data);
 }
 
+// Iconos SVG inline ultra-ligeros (0ms de overhead, cero layout thrashing)
+const SVG_ICONS = {
+  user: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  car: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`,
+  scan: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>`,
+};
+
+let lastEntitiesSignature = null;
 function renderEntitiesList(entities) {
   const container = document.getElementById('entities-list');
   if (!container) return;
@@ -365,46 +397,61 @@ function renderEntitiesList(entities) {
   if (activeCount) activeCount.textContent = `${entities.length} activas`;
 
   if (entities.length === 0) {
-    container.innerHTML = `<div class="empty-state">${I18N_DICTIONARY[currentLang].no_entities}</div>`;
+    if (lastEntitiesSignature !== "empty") {
+      lastEntitiesSignature = "empty";
+      container.innerHTML = `<div class="empty-state">${I18N_DICTIONARY[currentLang].no_entities}</div>`;
+    }
     return;
   }
+
+  // Comprobar si el estado cambió antes de tocar el DOM
+  const sig = entities.map((e) => `${e.id}:${e.speed}:${e.plate || ''}`).join('|');
+  if (sig === lastEntitiesSignature) return;
+  lastEntitiesSignature = sig;
 
   let html = '';
   entities.forEach((ent) => {
     const isPerson = (ent.raw_class || '').toLowerCase() in { persona: 1, person: 1 };
     const isSpeeding = ent.speed > 50.0;
     const typeClass = isPerson ? 'person' : (isSpeeding ? 'speeding' : '');
-    const iconName = isPerson ? 'user' : 'car';
+    const iconSvg = isPerson ? SVG_ICONS.user : SVG_ICONS.car;
     const plateHtml = ent.plate ? `<span class="chip-plate-tag">[${ent.plate}]</span>` : '';
 
     html += `
       <div class="entity-chip ${typeClass}">
-        <span><i data-lucide="${iconName}"></i> #${ent.id} ${ent.class} ${plateHtml}</span>
+        <span>${iconSvg} #${ent.id} ${ent.class} ${plateHtml}</span>
         <span class="speed-tag">${ent.speed} km/h</span>
       </div>
     `;
   });
   container.innerHTML = html;
-  if (window.lucide) lucide.createIcons();
 }
 
-// Render del Feed de Placas Detectadas en Vivo
+// Render del Feed de Placas Detectadas en Vivo con diffing
+let lastPlatesSignature = null;
 function renderRecentPlatesFeed(plates) {
   const container = document.getElementById('recent-plates-feed');
   const countBadge = document.getElementById('plates-live-count');
   if (countBadge) countBadge.textContent = plates.length;
 
   if (!plates || plates.length === 0) {
-    container.innerHTML = `<div class="empty-state">No se han detectado placas aún en la escena.</div>`;
+    if (lastPlatesSignature !== "empty") {
+      lastPlatesSignature = "empty";
+      container.innerHTML = `<div class="empty-state">No se han detectado placas aún en la escena.</div>`;
+    }
     return;
   }
+
+  const sig = plates.map((p) => `${p.plate}:${p.confidence}`).join('|');
+  if (sig === lastPlatesSignature) return;
+  lastPlatesSignature = sig;
 
   let html = '';
   plates.forEach((p) => {
     const v = p.vehicle_data || {};
     const thumbHtml = p.thumbnail
       ? `<img src="${p.thumbnail}" class="plate-feed-thumb" alt="${p.plate}">`
-      : `<span class="thumb-placeholder"><i data-lucide="scan-line"></i></span>`;
+      : `<span class="thumb-placeholder">${SVG_ICONS.scan}</span>`;
 
     html += `
       <div class="plate-feed-item" onclick="lookupPlate('${p.plate}')" title="Click para ver expediente completo">
@@ -420,7 +467,6 @@ function renderRecentPlatesFeed(plates) {
     `;
   });
   container.innerHTML = html;
-  if (window.lucide) lucide.createIcons();
 }
 
 // Consulta de Placa vía API REST
@@ -481,6 +527,9 @@ function renderVehicleDossier(data) {
 let userCoords = null;
 
 function requestUserLocation() {
+  // Carga inicial inmediata de contexto situacional sin esperar al GPS
+  loadSituationalContext();
+
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -492,13 +541,10 @@ function requestUserLocation() {
         loadSituationalContext();
       },
       (err) => {
-        console.warn('[GPS] Permiso de ubicación no concedido o no disponible:', err.message);
-        loadSituationalContext();
+        console.debug('[GPS] Ubicación no concedida:', err.message);
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 3000, enableHighAccuracy: false, maximumAge: 60000 }
     );
-  } else {
-    loadSituationalContext();
   }
 }
 

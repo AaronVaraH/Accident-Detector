@@ -21,6 +21,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 from src.pipeline_manager import pipeline_manager
@@ -51,6 +52,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 PWA_DIR = Path(__file__).resolve().parent / "pwa"
 PWA_DIR.mkdir(parents=True, exist_ok=True)
@@ -104,17 +106,21 @@ async def shutdown_event():
 
 async def generate_mjpeg_stream():
     """Generador HTTP multipart asíncrono para streaming continuo de video con Content-Length y sin bloquear el event loop."""
+    last_frame_bytes = None
     try:
         while True:
             frame_bytes = pipeline_manager.get_latest_jpeg()
-            if frame_bytes:
+            if frame_bytes and frame_bytes != last_frame_bytes:
+                last_frame_bytes = frame_bytes
                 header = (
                     b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n"
                     b"Content-Length: " + str(len(frame_bytes)).encode("ascii") + b"\r\n\r\n"
                 )
                 yield header + frame_bytes + b"\r\n"
-            await asyncio.sleep(0.033)  # ~30 FPS asíncrono no bloqueante
+                await asyncio.sleep(0.04)  # ~25 FPS máximo
+            else:
+                await asyncio.sleep(0.045)  # Espera activa no bloqueante sin retransmitir datos duplicados
     except (GeneratorExit, asyncio.CancelledError):
         pass
 
@@ -155,7 +161,7 @@ async def websocket_telemetry(websocket: WebSocket):
             while True:
                 telemetry = pipeline_manager.get_latest_telemetry()
                 await websocket.send_text(json.dumps(telemetry, default=numpy_safe_json))
-                await asyncio.sleep(0.04)  # ~25 actualizaciones/segundo
+                await asyncio.sleep(0.1)  # ~10 actualizaciones/segundo (óptimo para UI fluida y bajo consumo de red/CPU)
 
         async def receive_control_loop():
             while True:

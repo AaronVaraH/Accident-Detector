@@ -34,8 +34,8 @@ class PipelineManager:
         default_source: str = "client_cam",
         camera_id: str = "camera_01",
         lang: str = "es",
-        fire_conf: float = 0.15,
-        smoke_conf: float = 0.35,
+        fire_conf: float = 0.12,
+        smoke_conf: float = 0.18,
         vehicle_conf: float = settings.CONFIDENCE_THRESHOLD,
         track_persons: bool = True,
     ):
@@ -102,7 +102,7 @@ class PipelineManager:
         self.fire_detector = FireDetector(
             fire_conf=self.fire_conf,
             smoke_conf=self.smoke_conf,
-            enable_focal_lighter=False,
+            enable_focal_lighter=True,
         )
         self.motion_analyzer = MotionAnalyzer(history_weight=0.85, motion_threshold=22)
         self.hud = TacticalHUD(source_name=str(self.source))
@@ -229,7 +229,10 @@ class PipelineManager:
         def get_next_frame():
             nonlocal frame_idx
             if self.is_client_camera:
-                signaled = self._client_frame_event.wait(timeout=0.6)
+                signaled = self._client_frame_event.wait(timeout=0.30)
+                if not signaled:
+                    # Timeout esperando nuevo frame del cliente: no reprocesar el frame anterior para no anular la energía de movimiento
+                    return None, None
                 self._client_frame_event.clear()
                 now = time.time()
                 if self._client_frame_buffer is not None and (now - self._last_client_frame_time < 3.0):
@@ -252,32 +255,34 @@ class PipelineManager:
             if frame is None:
                 # Si es cámara móvil y no hay frames recientes, mostrar pantalla de espera limpia
                 if is_client:
-                    standby = np.zeros((480, 640, 3), dtype=np.uint8)
-                    cv2.putText(
-                        standby,
-                        "CAMARA REMOTA EN ESPERA",
-                        (140, 220),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.75,
-                        (0, 240, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
-                    cv2.putText(
-                        standby,
-                        "Presiona 'ACTIVAR CAMARA' en tu smartphone o dispositivo",
-                        (80, 265),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.50,
-                        (180, 200, 220),
-                        1,
-                        cv2.LINE_AA,
-                    )
-                    ret, s_buf = cv2.imencode(".jpg", standby, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
-                    if ret:
-                        with self._lock:
-                            self._latest_frame_jpeg = s_buf.tobytes()
-                    time.sleep(0.08)
+                    # Solo mostrar standby si pasaron más de 4 segundos sin recibir frames del cliente
+                    if time.time() - self._last_client_frame_time > 4.0:
+                        standby = np.zeros((480, 640, 3), dtype=np.uint8)
+                        cv2.putText(
+                            standby,
+                            "CAMARA REMOTA EN ESPERA",
+                            (140, 220),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.75,
+                            (0, 240, 255),
+                            2,
+                            cv2.LINE_AA,
+                        )
+                        cv2.putText(
+                            standby,
+                            "Presiona 'ACTIVAR CAMARA' en tu smartphone o dispositivo",
+                            (80, 265),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.50,
+                            (180, 200, 220),
+                            1,
+                            cv2.LINE_AA,
+                        )
+                        ret, s_buf = cv2.imencode(".jpg", standby, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                        if ret:
+                            with self._lock:
+                                self._latest_frame_jpeg = s_buf.tobytes()
+                    time.sleep(0.02)
                     continue
 
                 # Si es un video local terminado, reiniciar bucle
@@ -296,8 +301,13 @@ class PipelineManager:
                 fps_counter = 0
                 fps_time = now
 
-            # 1. Movimiento Óptico
-            raw_energy, _ = self.motion_analyzer.update(frame)
+            # Sincronización dinámica de umbrales ajustados en tiempo real por el usuario
+            self.vehicle_detector.conf_threshold = self.vehicle_conf
+            self.fire_detector.fire_conf = self.fire_conf
+            self.fire_detector.smoke_conf = self.smoke_conf
+
+            # 1. Movimiento Óptico Dinámico
+            raw_energy, motion_boxes = self.motion_analyzer.update(frame)
             motion_energy = float(raw_energy)
 
             # 2. Detección vehicular y humana
@@ -425,6 +435,39 @@ class PipelineManager:
                         entity_info["plate"] = plate_record.get("plate")
                         entity_info["vehicle_data"] = plate_record.get("vehicle_data", {})
                     telemetry_entities.append(entity_info)
+
+            # Escaneo periódico directo de placas si no hay vehículos o es cámara móvil/webcam
+            if (vehicles_count == 0 or is_client or is_webcam) and (f_idx % 6 == 0 or f_idx <= 2):
+                license_plate_detector.enqueue_full_frame(frame)
+
+            # Dibujar placas detectadas en la escena general
+            if -1 in active_plates_dict:
+                gen_plate = active_plates_dict[-1]
+                gbox = gen_plate.get("box")
+                gplate = gen_plate.get("plate")
+                if gbox and len(gbox) == 4 and gplate:
+                    annotated_frame = self.hud.render_tactical_box(
+                        frame=annotated_frame,
+                        box=gbox,
+                        label=f"PLACA: {gplate}",
+                        color=(0, 255, 140),
+                        plate_text=gplate,
+                    )
+                    telemetry_entities.append({
+                        "id": 999,
+                        "class": "Placa",
+                        "raw_class": "plate",
+                        "speed": 0.0,
+                        "box": [float(c) for c in gbox],
+                        "is_fast": False,
+                        "plate": gplate,
+                        "vehicle_data": gen_plate.get("vehicle_data", {}),
+                    })
+
+            # Dibujar recuadros tácticos de movimiento activo en escena
+            if motion_energy >= 0.06 and motion_boxes:
+                for mx1, my1, mx2, my2 in motion_boxes[:3]:
+                    cv2.rectangle(annotated_frame, (mx1, my1), (mx2, my2), (0, 180, 255), 1)
 
             telemetry_fire_smoke = []
             fires_count = 0

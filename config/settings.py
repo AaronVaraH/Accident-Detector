@@ -48,14 +48,16 @@ CONSECUTIVE_FIRE_FRAMES_REQUIRED = int(os.getenv("CONSECUTIVE_FIRE_FRAMES_REQUIR
 INCIDENT_COOLDOWN_SECONDS = int(os.getenv("INCIDENT_COOLDOWN_SECONDS", "10"))  # 10s cooldown reactivo
 
 # --- Integraciones y APIs Externas ---
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip("\"'")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip("\"'")
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_FROM_PHONE = os.getenv("TWILIO_FROM_PHONE", "")
-TWILIO_TO_PHONE = os.getenv("TWILIO_TO_PHONE", "")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip("\"'")
+TWILIO_API_KEY = os.getenv("TWILIO_API_KEY", "").strip("\"'")
+TWILIO_API_SECRET = os.getenv("TWILIO_API_SECRET", "").strip("\"'")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip("\"'")
+TWILIO_FROM_PHONE = os.getenv("TWILIO_FROM_PHONE", "").strip("\"'")
+TWILIO_TO_PHONE = os.getenv("TWILIO_TO_PHONE", "").strip("\"'")
 
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
-MAPS_API_KEY = os.getenv("MAPS_API_KEY", "")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "").strip("\"'")
+MAPS_API_KEY = os.getenv("MAPS_API_KEY", "").strip("\"'")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip("\"'")

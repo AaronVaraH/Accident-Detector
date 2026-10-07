@@ -121,6 +121,11 @@
               <i data-lucide="pause" id="pause-icon-lucide"></i>
               <span id="i18n-pause">PAUSAR</span>
             </button>
+            <label class="control-btn btn-upload-video" id="btn-upload-video-lbl" title="Subir video MP4 del juez para análisis en vivo">
+              <i data-lucide="file-video"></i>
+              <span id="i18n-upload-video">SUBIR VIDEO</span>
+              <input type="file" id="video-file-input" accept="video/mp4,video/avi,video/mov,video/*" style="display:none;">
+            </label>
           </div>
           <div class="toolbar-right">
             <div class="stream-stat">
@@ -214,7 +219,7 @@
           <div class="slider-row">
             <div class="slider-label-row">
               <span id="i18n-fire-sens">Sensibilidad de Fuego:</span>
-              <span class="slider-val" id="fire-conf-val">0.15</span>
+              <span class="slider-val" id="fire-conf-val">0.15 (Alta)</span>
             </div>
             <input type="range" min="0.05" max="0.80" step="0.02" value="0.15" id="slider-fire-conf" class="tactical-slider">
           </div>
@@ -222,9 +227,9 @@
           <div class="slider-row">
             <div class="slider-label-row">
               <span id="i18n-smoke-sens">Sensibilidad de Humo:</span>
-              <span class="slider-val" id="smoke-conf-val">0.22</span>
+              <span class="slider-val" id="smoke-conf-val">0.20 (Alta)</span>
             </div>
-            <input type="range" min="0.05" max="0.80" step="0.02" value="0.22" id="slider-smoke-conf" class="tactical-slider">
+            <input type="range" min="0.05" max="0.80" step="0.02" value="0.20" id="slider-smoke-conf" class="tactical-slider">
           </div>
         </div>
       </div>
@@ -344,6 +349,6 @@
   </main>
 
   <!-- Script Principal de la PWA -->
-  <script src="/static/app.js?v=5"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 </html>

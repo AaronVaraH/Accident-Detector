@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from src.pipeline_manager import pipeline_manager
 from src.plate_detector import license_plate_detector
 from src.enrichment import vehicle_service, weather_service, location_service, enrichment_aggregator
+from src.dispatcher import alert_dispatcher
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -101,9 +102,8 @@ async def shutdown_event():
     pipeline_manager.stop()
 
 
-def generate_mjpeg_stream():
-    """Generador HTTP multipart para streaming continuo de video con bajísima latencia."""
-    import time
+async def generate_mjpeg_stream():
+    """Generador HTTP multipart asíncrono para streaming continuo de video con Content-Length y sin bloquear el event loop."""
     try:
         while True:
             frame_bytes = pipeline_manager.get_latest_jpeg()
@@ -114,13 +114,13 @@ def generate_mjpeg_stream():
                     b"Content-Length: " + str(len(frame_bytes)).encode("ascii") + b"\r\n\r\n"
                 )
                 yield header + frame_bytes + b"\r\n"
-            time.sleep(0.033)  # ~30 FPS
+            await asyncio.sleep(0.033)  # ~30 FPS asíncrono no bloqueante
     except (GeneratorExit, asyncio.CancelledError):
         pass
 
 
 @app.get("/api/stream")
-def video_stream():
+async def video_stream():
     """Endpoint de transmisión MJPEG para navegadores y apps móviles."""
     return StreamingResponse(
         generate_mjpeg_stream(),
@@ -244,6 +244,35 @@ def post_control(payload: ControlPayload):
     if payload.smoke_conf is not None:
         pipeline_manager.smoke_conf = payload.smoke_conf
     return {"status": "ok", "telemetry": pipeline_manager.get_latest_telemetry()}
+
+
+@app.post("/api/upload-video")
+async def post_upload_video(request: Request):
+    """
+    Permite subir un archivo de video arbitrario (MP4, AVI, MOV) elegido por el juez
+    y cambiar automáticamente el pipeline para procesarlo en vivo con cero errores.
+    """
+    content = await request.body()
+    if not content:
+        raise HTTPException(status_code=400, detail="Archivo de video vacío.")
+
+    samples_dir = Path("tests/video_samples")
+    samples_dir.mkdir(parents=True, exist_ok=True)
+    filename = request.headers.get("x-filename", "judge_test_video.mp4")
+    target_path = samples_dir / filename
+
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    pipeline_manager.change_source(str(target_path))
+    logger.info(f"Video del juez subido y cargado como fuente activa: {target_path}")
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "source": str(target_path),
+        "message": "Video cargado con éxito en el pipeline de análisis en vivo.",
+    }
 
 
 # --- Endpoints de Placas y Registro Vehicular ---
@@ -371,7 +400,8 @@ def get_situational_context():
 def post_simulate_dispatch(payload: DispatchSimulationPayload):
     """
     Genera un paquete de despacho de emergencia enriquecido para CAD/911/Bomberos
-    cruzando tipo de siniestro, placa vehicular involucrada, condiciones de viento/clima y geolocalización.
+    cruzando tipo de siniestro, placa vehicular involucrada, condiciones de viento/clima y geolocalización,
+    y envía la alerta por SMS mediante Twilio.
     """
     dispatch = enrichment_aggregator.enrich_incident(
         incident_type=payload.incident_type,
@@ -379,6 +409,8 @@ def post_simulate_dispatch(payload: DispatchSimulationPayload):
         subtitle=payload.subtitle,
         plate=payload.plate,
     )
+    sms_result = alert_dispatcher.dispatch_incident_alert(dispatch)
+    dispatch["dispatch_status"] = sms_result
     return JSONResponse(content=dispatch)
 
 

@@ -13,6 +13,7 @@ const I18N_DICTIONARY = {
     install: "INSTALAR PWA",
     pause: "PAUSAR",
     resume: "REANUDAR",
+    upload_video: "SUBIR VIDEO",
     camera_active: "DETENER CÁMARA",
     camera_stopped: "ACTIVAR CÁMARA",
     motion_lbl: "ENERGÍA:",
@@ -43,6 +44,7 @@ const I18N_DICTIONARY = {
     install: "INSTALL PWA",
     pause: "PAUSE",
     resume: "RESUME",
+    upload_video: "UPLOAD VIDEO",
     camera_active: "STOP CAMERA",
     camera_stopped: "START CAMERA",
     motion_lbl: "MOTION:",
@@ -746,13 +748,17 @@ async function startDeviceCamera() {
     videoElem.setAttribute('webkit-playsinline', '');
     videoElem.srcObject = stream;
 
-    // VISIBILIDAD INMEDIATA: La cámara del usuario DEBE mostrarse sin demoras ni pantalla negra
-    videoElem.style.display = 'block';
-    videoElem.classList.add('active');
-    if (mainStream) mainStream.style.display = 'none';
+    // Mantener visible el stream con los recuadros de IA (peatones en verde, fuego en rojo, placas)
+    if (mainStream) {
+      mainStream.style.display = 'block';
+      mainStream.src = `/api/stream?t=${Date.now()}`;
+    }
+    // videoElem opera en segundo plano para captura y envío de frames
+    videoElem.style.display = 'none';
+    videoElem.classList.remove('active');
     if (tacticalOverlay) {
-      tacticalOverlay.style.display = 'block';
-      tacticalOverlay.classList.add('active');
+      tacticalOverlay.style.display = 'none';
+      tacticalOverlay.classList.remove('active');
     }
     if (cameraBadge) cameraBadge.style.display = 'flex';
 
@@ -951,8 +957,11 @@ async function flipDeviceCamera() {
     videoElem.playsInline = true;
     videoElem.autoplay = true;
     videoElem.srcObject = newStream;
-    videoElem.style.display = 'block';
-    videoElem.classList.add('active');
+    videoElem.style.display = 'none';
+    videoElem.classList.remove('active');
+    if (mainStream) {
+      mainStream.style.display = 'block';
+    }
     await videoElem.play().catch(() => {});
     showSystemToast(`Cámara lista: ${currentFacingMode === 'environment' ? 'Trasera' : 'Frontal'}`);
   } catch (err) {
@@ -1042,7 +1051,8 @@ function setupEventListeners() {
     fireSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('fire-conf-val');
-      if (valDisplay) valDisplay.textContent = val.toFixed(2);
+      const tag = val <= 0.20 ? ' (Alta)' : (val <= 0.45 ? ' (Media)' : ' (Baja)');
+      if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', fire_conf: val });
     });
   }
@@ -1051,7 +1061,8 @@ function setupEventListeners() {
     smokeSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('smoke-conf-val');
-      if (valDisplay) valDisplay.textContent = val.toFixed(2);
+      const tag = val <= 0.20 ? ' (Alta)' : (val <= 0.45 ? ' (Media)' : ' (Baja)');
+      if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', smoke_conf: val });
     });
   }
@@ -1173,6 +1184,44 @@ function setupEventListeners() {
       reader.readAsDataURL(file);
     });
   }
+
+  // Carga de Video Nuevo en Vivo (Elegido por el juez)
+  const videoInput = document.getElementById('video-file-input');
+  if (videoInput) {
+    videoInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      playTacticalChirp();
+      showSystemToast(`Cargando video del juez: ${file.name}...`);
+
+      try {
+        const res = await fetch('/api/upload-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type || 'video/mp4',
+            'X-Filename': file.name,
+          },
+          body: file,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          stopDeviceCamera(false);
+          showSystemToast(`✅ ${data.message || 'Video cargado en vivo.'}`);
+          // Refrescar stream
+          const mainStream = document.getElementById('main-stream');
+          if (mainStream) {
+            mainStream.src = `/api/stream?t=${Date.now()}`;
+          }
+        } else {
+          showSystemToast('❌ Error subiendo video. Verifique formato.');
+        }
+      } catch (err) {
+        console.error('Error subiendo video del juez:', err);
+        showSystemToast('❌ Error de conexión al subir video.');
+      }
+    });
+  }
 }
 
 function updateActiveSourceBtn(source) {
@@ -1195,6 +1244,9 @@ function applyLanguage(lang) {
 
   const pause = document.getElementById('i18n-pause');
   if (pause) pause.textContent = isPaused ? dict.resume : dict.pause;
+
+  const uploadVid = document.getElementById('i18n-upload-video');
+  if (uploadVid) uploadVid.textContent = dict.upload_video;
 
   const motionLbl = document.getElementById('i18n-motion-lbl');
   if (motionLbl) motionLbl.textContent = dict.motion_lbl;

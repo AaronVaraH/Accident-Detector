@@ -86,15 +86,16 @@ class FireDetector:
             & (ycrcb[:, :, 2] <= 127)
         )
         skin_ratio = np.count_nonzero(skin_mask) / float(crop.shape[0] * crop.shape[1])
-        if skin_ratio >= 0.16:
-            return True  # Es piel humana (mano/brazo/cara) con desenfoque de movimiento
+        # Solo descartar si la mayor parte del recorte es piel humana pura sin presencia de humo
+        if skin_ratio >= 0.55:
+            return True  # Es piel humana (mano/brazo/cara) pura
 
-        # 2. Filtro HSV para alta saturación (ropa u objetos coloridos con desenfoque)
+        # 2. Filtro HSV para alta saturación (ropa u objetos plásticos intensos sin humo)
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
         sat = hsv[:, :, 1]
-        high_sat_ratio = np.count_nonzero(sat > 85) / float(crop.shape[0] * crop.shape[1])
-        if high_sat_ratio >= 0.30:
-            return True  # Ropa o plástico colorido en movimiento, no humo
+        high_sat_ratio = np.count_nonzero(sat > 110) / float(crop.shape[0] * crop.shape[1])
+        if high_sat_ratio >= 0.45:
+            return True  # Ropa o plástico de saturación extrema, no humo
 
         return False
 
@@ -102,10 +103,9 @@ class FireDetector:
     def _is_valid_flame_chroma(crop: np.ndarray) -> bool:
         """
         Determina si una región candidata a fuego tiene el perfil cromático y térmico de una llama real
-        (alta luminancia, gradiente hacia núcleo incandescente) y descarta prendas de ropa de color naranja/rojo,
-        chalecos reflectantes y reflejos de luz blanca sobre objetos neutros.
+        (alta luminancia, gradiente cálido) tolerante a la compresión JPEG de cámaras móviles y navegadores.
         """
-        if crop.size == 0 or crop.shape[0] < 6 or crop.shape[1] < 6:
+        if crop.size == 0 or crop.shape[0] < 4 or crop.shape[1] < 4:
             return False
 
         b, g, r = cv2.split(crop)
@@ -114,51 +114,45 @@ class FireDetector:
         sat = hsv[:, :, 1]
         val = hsv[:, :, 2]
 
-        # 1. Validación de incandescencia térmica (emisión de luz propia):
-        # Una llama viva genera sobreexposición en la cámara y píxeles muy brillantes (núcleo blanco/amarillo).
-        # Una camisa o tela naranja bajo luz normal es reflectante difusa con luminancia moderada (val < 205).
-        incandescent_mask = (val >= 215) & (r >= 205) & (g >= 95)
+        # 1. Región cálida incandescente/brillante
+        incandescent_mask = (val >= 180) & (r >= 150) & (g >= 60)
         incandescent_ratio = np.count_nonzero(incandescent_mask) / float(crop.shape[0] * crop.shape[1])
 
         # 2. Píxeles cálidos de espectro de llama (amarillo/naranja/rojo)
         warm_flame_mask = (
-            (r.astype(np.int16) - b.astype(np.int16) >= 28)
-            & (r >= 150)
-            & (sat >= 45)
-            & ((hue <= 35) | (hue >= 165))
+            (r.astype(np.int16) - b.astype(np.int16) >= 10)
+            & (r >= 110)
+            & (sat >= 15)
+            & ((hue <= 45) | (hue >= 150))
         )
         warm_ratio = np.count_nonzero(warm_flame_mask) / float(crop.shape[0] * crop.shape[1])
 
-        # 3. Descarte de telas y prendas de ropa con color uniforme y baja incandescencia:
-        # La tela de una camisa bajo luz normal tiene textura suave y carece de brillo incandescente (val < 215).
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        _, std_dev = cv2.meanStdDev(gray)
-        is_dull_cloth = (incandescent_ratio < 0.01) and (std_dev[0][0] < 40.0)
-        if is_dull_cloth:
-            return False
-
-        # 4. Descarte de reflejo de luz blanca / brillo especular neutro
+        # Descarte de objetos neutros (ropa/pared blanca) sin presencia de espectro térmico
         white_glare_mask = (
-            (val >= 195)
-            & (np.abs(r.astype(np.int16) - b.astype(np.int16)) < 22)
-            & (sat < 32)
+            (val >= 210)
+            & (np.abs(r.astype(np.int16) - b.astype(np.int16)) < 15)
+            & (sat < 20)
         )
         white_count = np.count_nonzero(white_glare_mask)
         warm_count = np.count_nonzero(warm_flame_mask)
 
-        if white_count > warm_count * 1.8:
+        # Si no hay absolutamente ningún píxel cálido ni núcleo incandescente, descartar
+        if warm_count == 0 and incandescent_ratio < 0.01:
             return False
 
-        # Exigir un mínimo de concentración térmica cálida y presencia de gradiente o incandescencia
-        return warm_ratio >= 0.06 and (incandescent_ratio >= 0.01 or std_dev[0][0] >= 40.0)
+        # Si es un objeto completamente blanco plano sin gradiente cálido en bordes
+        if warm_count < 2 and white_count > 15:
+            return False
+
+        return warm_ratio >= 0.015 or incandescent_ratio >= 0.008
 
     def __init__(
         self,
         model_path: str = settings.FIRE_SMOKE_MODEL_PATH,
         lighter_model_path: str = settings.LIGHTER_FLAME_MODEL_PATH,
-        fire_conf: float = 0.35,
-        smoke_conf: float = 0.28,
-        enable_focal_lighter: bool = False,
+        fire_conf: float = 0.12,
+        smoke_conf: float = 0.18,
+        enable_focal_lighter: bool = True,
     ):
         self.fire_conf = fire_conf
         self.smoke_conf = smoke_conf
@@ -243,56 +237,27 @@ class FireDetector:
                 labels_list.append(f"FUEGO ({conf:.2f})")
                 class_ids_list.append(1)
 
-        # 2. Localizador Focalizado para Llamas Pequeñas (Opcional, de alta precisión)
+        # 2. Localizador de Llamas y Encendedores (ONNX especializado en cuerpo y llama)
         has_fire = any(cid == 1 for cid in class_ids_list)
         if not has_fire and self.enable_focal_lighter and self.lighter_model is not None:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            blur = cv2.GaussianBlur(gray, (31, 31), 0)
-            local_contrast = cv2.subtract(gray, blur)
+            l_conf_thresh = min(0.25, self.fire_conf)
+            l_res = self.lighter_model(frame, conf=l_conf_thresh, imgsz=640, verbose=False)[0]
+            for lb in l_res.boxes:
+                lname = self.lighter_model.names[int(lb.cls[0])].lower()
+                lconf = float(lb.conf[0])
+                if lname in ["ates", "fire"] and lconf >= l_conf_thresh:
+                    bx1, by1, bx2, by2 = [max(0, round(x)) for x in lb.xyxy[0].tolist()]
+                    bx1, by1 = min(w - 1, bx1), min(h - 1, by1)
+                    bx2, by2 = min(w, max(bx1 + 1, bx2)), min(h, max(by1 + 1, by2))
+                    flame_patch = frame[by1:by2, bx1:bx2]
+                    if not self._is_valid_flame_chroma(flame_patch):
+                        continue
 
-            # Exigir incandescencia lumínica extrema y fuerte componente cálido
-            b_ch, _, r_ch = cv2.split(frame)
-            warm_highlight = (
-                (r_ch.astype(np.int16) - b_ch.astype(np.int16) >= 40)
-                & (r_ch >= 215)
-                & (gray >= 210)
-            )
-            cand_mask = (warm_highlight & (local_contrast >= 18)).astype(np.uint8) * 255
-            contours, _ = cv2.findContours(cand_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            top_cnts = sorted(contours, key=cv2.contourArea, reverse=True)[:1]
-            for cnt in top_cnts:
-                area = cv2.contourArea(cnt)
-                if 10 <= area <= 4000:
-                    bx, by, bw, bh = cv2.boundingRect(cnt)
-                    cx, cy = bx + bw // 2, by + bh // 2
-                    pad = 36
-                    x1, y1 = max(0, cx - pad), max(0, cy - pad)
-                    x2, y2 = min(w, cx + pad), min(h, cy + pad)
-                    crop = frame[y1:y2, x1:x2]
-
-                    if crop.size > 0:
-                        l_res = self.lighter_model(crop, conf=0.55, imgsz=160, verbose=False)[0]
-                        for lb in l_res.boxes:
-                            lname = self.lighter_model.names[int(lb.cls[0])].lower()
-                            lconf = float(lb.conf[0])
-                            if lname in ["ates", "fire"] and lconf >= 0.55:
-                                lx1, ly1, lx2, ly2 = lb.xyxy[0].tolist()
-                                gx1 = max(0, int(x1 + lx1))
-                                gy1 = max(0, int(y1 + ly1))
-                                gx2 = min(w, int(x1 + lx2))
-                                gy2 = min(h, int(y1 + ly2))
-
-                                flame_patch = frame[gy1:gy2, gx1:gx2]
-                                if not self._is_valid_flame_chroma(flame_patch):
-                                    continue
-
-                                boxes_list.append([gx1, gy1, gx2, gy2])
-                                conf_list.append(lconf)
-                                labels_list.append(f"FUEGO ({lconf:.2f})")
-                                class_ids_list.append(1)
-                                logger.info(f"🔥 Llama detectada por localizador focal: {lconf:.2f}")
-                                break
+                    boxes_list.append([bx1, by1, bx2, by2])
+                    conf_list.append(lconf)
+                    labels_list.append(f"FUEGO ({lconf:.2f})")
+                    class_ids_list.append(1)
+                    logger.info(f"🔥 Llama detectada por modelo de encendedor/fuego: {lconf:.2f}")
 
         if len(boxes_list) == 0:
             return sv.Detections.empty(), []

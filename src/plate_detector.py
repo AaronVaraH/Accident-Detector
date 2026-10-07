@@ -262,6 +262,8 @@ class LicensePlateDetector:
 
             if vehicle_id is not None:
                 self.active_plates_by_vehicle[vehicle_id] = record
+            else:
+                self.active_plates_by_vehicle[-1] = record
 
         logger.info(f"[PLATE] Placa detectada: {record.plate_text} ({vehicle_data.get('brand')} {vehicle_data.get('model')}) - Conf: {confidence:.2f}")
         return record
@@ -291,6 +293,20 @@ class LicensePlateDetector:
         if crop.size > 0:
             self.task_queue.put((crop, (vx1, vy1), vehicle_id))
 
+    def enqueue_full_frame(self, frame: np.ndarray):
+        """
+        Encola un frame completo para escanear y detectar placas directamente en la escena
+        (ideal para cámara de celular o cuando no se detecta un vehículo completo previo).
+        """
+        if self.task_queue.full():
+            try:
+                self.task_queue.get_nowait()
+            except queue.Empty:
+                pass
+
+        if frame is not None and frame.size > 0:
+            self.task_queue.put((frame.copy(), (0, 0), None))
+
     def _async_worker_loop(self):
         """Hilo de fondo que procesa solicitudes de detección de placas con Roboflow y OCR."""
         while self.is_running:
@@ -299,7 +315,7 @@ class LicensePlateDetector:
                 crop, offset, vehicle_id = item
                 ox, oy = offset
 
-                # Ejecutar Roboflow model en el recorte
+                # Ejecutar Roboflow model en el recorte o imagen completa
                 detected = self.detect_plates_in_crop(crop)
                 for d in detected:
                     px1, py1, px2, py2 = d["box"]

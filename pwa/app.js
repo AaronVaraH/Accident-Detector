@@ -80,6 +80,7 @@ let clientVideoStream = null;
 let uplinkInterval = null;
 let lastIncidentId = 0;
 let audioContext = null;
+let userHasSearchedPlate = false;
 
 // --- 2. Registro del Service Worker y PWA Install Prompt ---
 if ('serviceWorker' in navigator) {
@@ -506,25 +507,43 @@ function renderRecentPlatesFeed(plates) {
   container.innerHTML = html;
 }
 
-// Consulta de Placa vía API REST
-async function lookupPlate(plateNumber) {
-  playTacticalChirp();
+// Consulta de Placa o VIN vía API REST
+async function lookupPlate(plateOrVin, isDemo = false) {
   const input = document.getElementById('plate-search-input');
-  if (input) input.value = plateNumber;
+
+  // Si es una consulta demo pero el usuario ya interactuó con el buscador, no interferir
+  if (isDemo && userHasSearchedPlate) {
+    return;
+  }
+  if (isDemo && input && input.value.trim() !== '' && input.value.trim() !== 'ABC-1234') {
+    return;
+  }
+
+  playTacticalChirp();
+
+  if (input) {
+    if (!isDemo) {
+      input.value = plateOrVin;
+      userHasSearchedPlate = true;
+    } else if (input.value.trim() === '') {
+      input.value = plateOrVin;
+    }
+  }
 
   try {
     const res = await fetch('/api/plates/lookup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plate: plateNumber }),
+      body: JSON.stringify({ query: plateOrVin, plate: plateOrVin }),
     });
 
     if (res.ok) {
       const data = await res.json();
+      if (isDemo && userHasSearchedPlate) return;
       renderVehicleDossier(data);
     }
   } catch (err) {
-    console.warn('Error consultando placa:', err);
+    console.warn('Error consultando placa o VIN:', err);
   }
 }
 
@@ -547,6 +566,10 @@ function renderVehicleDossier(data) {
 
   document.getElementById('dossier-make-model').textContent = `${data.brand || '---'} ${data.model || ''}`;
   document.getElementById('dossier-year-color').textContent = `${data.year || '---'} | ${data.color || '---'}`;
+  const vinElem = document.getElementById('dossier-vin');
+  if (vinElem) {
+    vinElem.textContent = data.vin || '---';
+  }
   document.getElementById('dossier-fuel').textContent = data.fuel_type || 'Gasolina';
   document.getElementById('dossier-jurisdiction').textContent = data.jurisdiction || 'México';
 
@@ -1245,18 +1268,32 @@ function setupEventListeners() {
     });
   }
 
-  // Consulta manual de Placa
+  // Consulta manual de Placa o VIN
   const btnSearchPlate = document.getElementById('btn-search-plate');
   const plateInput = document.getElementById('plate-search-input');
+  if (plateInput) {
+    plateInput.addEventListener('input', () => {
+      userHasSearchedPlate = true;
+    });
+    plateInput.addEventListener('focus', () => {
+      userHasSearchedPlate = true;
+    });
+  }
   if (btnSearchPlate && plateInput) {
     btnSearchPlate.addEventListener('click', () => {
       const val = plateInput.value.trim();
-      if (val) lookupPlate(val);
+      if (val) {
+        userHasSearchedPlate = true;
+        lookupPlate(val, false);
+      }
     });
     plateInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const val = plateInput.value.trim();
-        if (val) lookupPlate(val);
+        if (val) {
+          userHasSearchedPlate = true;
+          lookupPlate(val, false);
+        }
       }
     });
   }
@@ -1448,8 +1485,8 @@ document.addEventListener('DOMContentLoaded', () => {
   requestUserLocation();
   setInterval(loadIncidentsHistory, 5000);
   setInterval(loadSituationalContext, 30000);
-  // Cargar una placa de demostración en el expediente
-  lookupPlate('ABC-1234');
+  // Cargar una placa de demostración en el expediente solo si el usuario no ha interactuado aún
+  lookupPlate('ABC-1234', true);
 
   if (window.lucide && typeof lucide.createIcons === 'function') {
     lucide.createIcons();

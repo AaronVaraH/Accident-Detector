@@ -134,54 +134,73 @@ class VehicleLookupService:
         """Limpia la placa removiendo espacios, guiones y caracteres no alfanuméricos."""
         return "".join(c for c in plate.upper() if c.isalnum())
 
-    def lookup(self, plate: str) -> Dict[str, Any]:
+    def lookup(self, plate_or_vin: str) -> Dict[str, Any]:
         """
-        Consulta los datos técnicos, legales y de combustible para una placa vehicular.
-        Prioriza la llamada en vivo a RapidAPI (car-api2) para obtener datos de fabricante en tiempo real.
+        Consulta los datos técnicos, legales y de combustible para una placa vehicular o VIN / Número de serie.
+        Prioriza la búsqueda por VIN en los registros locales y base de datos, luego RapidAPI o generador determinista.
         """
-        clean_plate = self.normalize_plate(plate)
-        if not clean_plate:
+        clean_query = self.normalize_plate(plate_or_vin)
+        if not clean_query:
             return {
-                "plate": plate,
+                "plate": plate_or_vin,
                 "found": False,
-                "error": "Placa inválida o vacía",
+                "error": "Consulta inválida o vacía",
             }
 
-        # 1. Si ya se consultó y verificó en vivo por RapidAPI en esta sesión, o fue registrada manualmente, retornar caché
-        if clean_plate in self.cache:
-            c = self.cache[clean_plate]
+        # 1. Búsqueda directa por VIN en la caché y base de datos local
+        for c in list(self.cache.values()):
+            if c.get("vin") and self.normalize_plate(c["vin"]) == clean_query:
+                data = dict(c)
+                data["query_timestamp"] = datetime.now().isoformat()
+                return data
+
+        for c in list(DEFAULT_VEHICLE_DATABASE.values()):
+            if c.get("vin") and self.normalize_plate(c["vin"]) == clean_query:
+                data = dict(c)
+                data["query_timestamp"] = datetime.now().isoformat()
+                return data
+
+        # 2. Si ya se consultó y verificó por placa en caché
+        if clean_query in self.cache:
+            c = self.cache[clean_query]
             if c.get("rapidapi_call") or c.get("is_manual") or c.get("source") == "Manual Registration":
                 data = dict(c)
                 data["query_timestamp"] = datetime.now().isoformat()
                 return data
 
-        base_info = self.cache.get(clean_plate) or DEFAULT_VEHICLE_DATABASE.get(clean_plate)
+        is_vin_query = (len(clean_query) == 17)
+        base_info = self.cache.get(clean_query) or DEFAULT_VEHICLE_DATABASE.get(clean_query)
 
-        # 2. Consulta en vivo a RapidAPI (car-api2)
+        # 3. Consulta en vivo a RapidAPI (car-api2)
         if self.api_key:
-            rapidapi_data = self._query_rapidapi(clean_plate, base_info)
+            rapidapi_data = self._query_rapidapi(clean_query, base_info, direct_vin=clean_query if is_vin_query else None)
             if rapidapi_data:
-                self.cache[clean_plate] = rapidapi_data
+                self.cache[clean_query] = rapidapi_data
                 return rapidapi_data
 
-        # 3. Fallback a base local o generador determinista si no hay conexión externa
-        if clean_plate in self.cache:
-            data = dict(self.cache[clean_plate])
+        # 4. Fallback a generador determinista (por VIN o por Placa)
+        if is_vin_query:
+            generated = self._generate_deterministic_record_by_vin(clean_query)
+            self.cache[clean_query] = generated
+            return generated
+
+        if clean_query in self.cache:
+            data = dict(self.cache[clean_query])
             data["query_timestamp"] = datetime.now().isoformat()
             return data
 
-        generated = self._generate_deterministic_record(clean_plate)
-        self.cache[clean_plate] = generated
+        generated = self._generate_deterministic_record(clean_query)
+        self.cache[clean_query] = generated
         return generated
 
-    def _query_rapidapi(self, clean_plate: str, base_info: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def _query_rapidapi(self, clean_plate: str, base_info: Optional[Dict[str, Any]] = None, direct_vin: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Consulta oficial a Car API (car-api2) en RapidAPI mediante VIN vehicular.
         Retorna la ficha técnica, nivel de electrificación, combustible y seguridad.
         """
         try:
-            # Seleccionar VIN representativo (2015-2020) para la consulta
-            vin = (base_info or {}).get("vin")
+            # Seleccionar VIN representativo (2015-2020) para la consulta si no se provee uno directo
+            vin = direct_vin or (base_info or {}).get("vin")
             if not vin:
                 h = int(hashlib.md5(clean_plate.encode()).hexdigest(), 16)
                 # Alternar entre fabricantes según el hash de la placa
@@ -212,7 +231,7 @@ class VehicleLookupService:
 
                 fuel_type = "100% Eléctrico (EV - Batería Li-Ion)" if is_ev else ("Gasolina" if "Gasoline" in raw_fuel else (base_info or {}).get("fuel_type", "Gasolina"))
 
-                formatted_plate = (base_info or {}).get("plate") or f"{clean_plate[:3]}-{clean_plate[3:]}"
+                formatted_plate = (base_info or {}).get("plate") or (f"VIN-{vin[-6:]}" if direct_vin else f"{clean_plate[:3]}-{clean_plate[3:]}")
                 is_stolen = (base_info or {}).get("is_stolen", False)
                 stolen_status = (base_info or {}).get("stolen_status", "SIN REPORTE DE ROBO")
 
@@ -241,13 +260,54 @@ class VehicleLookupService:
                 if is_ev:
                     record["hazmat_alert"] = "ALERTA HAZMAT: Vehículo 100% Eléctrico (Batería Li-Ion). Riesgo de embalamiento térmico y gases inflamables. Requiere protocolo de enfriamiento extensivo."
 
-                logger.info(f"RapidAPI car-api2 consulta exitosa para placa {clean_plate} (VIN: {vin}): {make} {model}")
+                logger.info(f"RapidAPI car-api2 consulta exitosa para {clean_plate} (VIN: {vin}): {make} {model}")
                 return record
             else:
                 logger.warning(f"RapidAPI car-api2 retornó status {resp.status_code}: {resp.text[:100]}")
         except Exception as e:
-            logger.warning(f"Error en consulta externa RapidAPI para placa {clean_plate}: {e}")
+            logger.warning(f"Error en consulta externa RapidAPI para consulta {clean_plate}: {e}")
         return None
+
+    def _generate_deterministic_record_by_vin(self, vin_str: str) -> Dict[str, Any]:
+        """Crea una ficha vehicular fija basada en el hash de un número de serie / VIN."""
+        h = int(hashlib.md5(vin_str.encode()).hexdigest(), 16)
+        brand_info = BRANDS_POOL[h % len(BRANDS_POOL)]
+        brand = brand_info[0]
+        models = brand_info[1]
+        model = models[(h // 7) % len(models)]
+        fuel = brand_info[2]
+        color = COLORS_POOL[(h // 13) % len(COLORS_POOL)]
+        year = 2016 + (h % 9)
+        jurisdiction = JURISDICTIONS_POOL[(h // 17) % len(JURISDICTIONS_POOL)]
+
+        is_stolen = (h % 20 == 0)
+        stolen_status = "🚨 REPORTE DE ROBO ACTIVO" if is_stolen else "SIN REPORTE DE ROBO"
+        generated_plate = f"VIN-{vin_str[-6:]}"
+
+        is_ev = "Eléctrico" in fuel
+        record = {
+            "plate": generated_plate,
+            "raw_plate": self.normalize_plate(generated_plate),
+            "brand": brand,
+            "model": model,
+            "year": year,
+            "color": color,
+            "vehicle_type": "Sedán" if "Versa" in model or "Jetta" in model or "Civic" in model else ("SUV" if "RAV4" in model or "Tracker" in model else "Camioneta"),
+            "fuel_type": fuel,
+            "vin": vin_str,
+            "jurisdiction": jurisdiction,
+            "owner_type": "Particular",
+            "stolen_status": stolen_status,
+            "is_stolen": is_stolen,
+            "insurance_company": "Quálitas Compañía de Seguros",
+            "policy_active": not is_stolen,
+            "source": "Registro Vehicular Nacional (Búsqueda por VIN)",
+            "query_timestamp": datetime.now().isoformat(),
+        }
+        if is_ev:
+            record["hazmat_alert"] = "BATERÍA DE ALTO VOLTAJE: Riesgo de arco eléctrico o fuga térmica en siniestros severos."
+
+        return record
 
     def _generate_deterministic_record(self, clean_plate: str) -> Dict[str, Any]:
         """Crea una ficha vehicular realista y fija basada en el hash de la placa."""

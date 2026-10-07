@@ -64,6 +64,13 @@ def test_vehicle_lookup_service():
     assert "hazmat_alert" in v2
     print(f"[OK] Ficha Tesla EV: {v2['brand']} - {v2['hazmat_alert']}")
 
+    # Consulta por número de serie/VIN registrado
+    v_by_vin = vehicle_service.lookup("5YJ3E1EA7JF000000")
+    assert v_by_vin["plate"] == "XYZ-789-A"
+    assert v_by_vin["brand"] == "Tesla"
+    assert v_by_vin["vin"] == "5YJ3E1EA7JF000000"
+    print(f"[OK] Consulta por VIN: {v_by_vin['vin']} -> {v_by_vin['plate']}")
+
     # Consulta de vehículo con reporte de robo
     v3 = vehicle_service.lookup("ROB-404-X")
     assert v3["is_stolen"] is True
@@ -75,6 +82,40 @@ def test_vehicle_lookup_service():
     assert "model" in v_new
     assert "fuel_type" in v_new
     print(f"[OK] Consulta determinista de nueva placa 'JAL-9988': {v_new['brand']} {v_new['model']} ({v_new['year']})")
+
+
+def test_vin_lookup_service():
+    print("\n--- 2b. Test Enfocado en Búsqueda por VIN / Número de Serie ---")
+    # 1. VIN registrado correspondiente a Nissan Sentra
+    v_nissan = vehicle_service.lookup("3N1AB7AP6JL000000")
+    assert v_nissan["vin"] == "3N1AB7AP6JL000000"
+    assert v_nissan["brand"] == "Nissan"
+    assert v_nissan["plate"] == "ABC-1234"
+    print(f"[OK] Búsqueda VIN (Nissan): {v_nissan['vin']} -> {v_nissan['brand']} {v_nissan['model']} (Placa: {v_nissan['plate']})")
+
+    # 2. VIN registrado correspondiente a Tesla Model 3
+    v_tesla = vehicle_service.lookup("5YJ3E1EA7JF000000")
+    assert v_tesla["vin"] == "5YJ3E1EA7JF000000"
+    assert v_tesla["brand"] == "Tesla"
+    assert v_tesla["plate"] == "XYZ-789-A"
+    print(f"[OK] Búsqueda VIN (Tesla): {v_tesla['vin']} -> {v_tesla['brand']} {v_tesla['model']} (Placa: {v_tesla['plate']})")
+
+    # 3. VIN de 17 caracteres no registrado previamente
+    new_vin = "1G1YY22U155100000"
+    v_custom_vin = vehicle_service.lookup(new_vin)
+    assert v_custom_vin["vin"] == new_vin
+    assert "brand" in v_custom_vin
+    assert "model" in v_custom_vin
+    print(f"[OK] Búsqueda VIN nuevo 17 chars: {v_custom_vin['vin']} -> {v_custom_vin['brand']} {v_custom_vin['model']}")
+
+    # 4. Prueba REST API POST /api/plates/lookup enviando campo 'query' con VIN
+    client = TestClient(app)
+    r_api = client.post("/api/plates/lookup", json={"query": "3N1AB7AP6JL000000"})
+    assert r_api.status_code == 200
+    res_json = r_api.json()
+    assert res_json["vin"] == "3N1AB7AP6JL000000"
+    assert res_json["brand"] == "Nissan"
+    print(f"[OK] API REST POST /api/plates/lookup con VIN exitosa: {res_json['brand']} {res_json['model']}")
 
 
 def test_enrichment_services():
@@ -163,6 +204,7 @@ def test_fastapi_rest_endpoints():
 if __name__ == "__main__":
     test_plate_detection_roboflow_and_ocr()
     test_vehicle_lookup_service()
+    test_vin_lookup_service()
     test_enrichment_services()
     test_fastapi_rest_endpoints()
     print("\n✅ TODAS LAS PRUEBAS DE PLACAS Y APIS COMPLETADAS CON ÉXITO.")

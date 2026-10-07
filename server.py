@@ -68,7 +68,8 @@ class ControlPayload(BaseModel):
 
 
 class PlateLookupPayload(BaseModel):
-    plate: str
+    plate: Optional[str] = None
+    query: Optional[str] = None
 
 
 class PlateRegisterPayload(BaseModel):
@@ -297,15 +298,18 @@ def get_active_plates():
 
 @app.get("/api/plates/{plate}")
 def get_plate_details(plate: str):
-    """Consulta la ficha técnica vehicular de una placa específica."""
+    """Consulta la ficha técnica vehicular por placa o VIN específico."""
     data = vehicle_service.lookup(plate)
     return JSONResponse(content=data)
 
 
 @app.post("/api/plates/lookup")
 def post_plate_lookup(payload: PlateLookupPayload):
-    """Consulta los datos del vehículo por número de placa (JSON POST)."""
-    data = vehicle_service.lookup(payload.plate)
+    """Consulta los datos del vehículo por número de placa o VIN (JSON POST)."""
+    search_term = payload.query or payload.plate or ""
+    if not search_term:
+        raise HTTPException(status_code=400, detail="Parámetro 'plate' o 'query' es requerido.")
+    data = vehicle_service.lookup(search_term)
     return JSONResponse(content=data)
 
 

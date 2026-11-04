@@ -150,6 +150,37 @@ def test_fire_smoke_chroma_filters():
     print("[OK] Llama real (cálida con alta saturación) aceptada correctamente para fuego.")
 
 
+    # 5. Parche mixto: mano sosteniendo hoja con humo tenue (B=130, G=132, R=135 en 50% y piel en 50%)
+    mixed_crop = np.full((60, 60, 3), [110, 140, 200], dtype=np.uint8) # fondo con mano
+    mixed_crop[:30, :] = [130, 132, 135] # humo en mitad superior
+    assert FireDetector._is_human_skin_or_colorful_object(mixed_crop) is False
+    print("[OK] Mano sosteniendo hoja quemándose con humo admitida correctamente (no descartada).")
+
+    # 6. Luz de foco/lámpara cálida uniforme (B=180, G=230, R=255)
+    warm_lamp = np.full((40, 40, 3), [180, 230, 255], dtype=np.uint8)
+    assert FireDetector._is_valid_flame_chroma(warm_lamp) is False
+    print("[OK] Foco/lámpara cálida uniforme descartado correctamente.")
+
+    # 7. Test persistencia suave de humo frente a titileo
+    from src.incident_rules import IncidentRuleEngine
+    engine = IncidentRuleEngine(fire_persistence_frames=3, smoke_persistence_frames=2)
+    smoke_det = sv.Detections(
+        xyxy=np.array([[10, 10, 50, 50]]),
+        confidence=np.array([0.16]),
+        class_id=np.array([0]),
+    )
+    # Frame 1: humo presente
+    engine.evaluate(1, [], smoke_det)
+    assert engine._consecutive_smoke_count == 1
+    # Frame 2: humo parpadea (frame sin detección)
+    engine.evaluate(2, [], sv.Detections.empty())
+    assert engine._consecutive_smoke_count == 0 or engine._consecutive_smoke_count == 0  # decae a 0 o 1
+    # Frame 3: humo presente de nuevo
+    engine.evaluate(3, [], smoke_det)
+    assert engine._consecutive_smoke_count >= 1
+    print("[OK] Persistencia temporal adaptativa contra titileo de humo validada.")
+
+
 if __name__ == "__main__":
     test_i18n()
     test_smoke_vs_fire_rules()

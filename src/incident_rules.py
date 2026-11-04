@@ -72,7 +72,7 @@ class IncidentRuleEngine:
         self.smoke_persistence_frames = (
             smoke_persistence_frames
             if smoke_persistence_frames is not None
-            else fire_persistence_frames
+            else min(2, fire_persistence_frames)
         )
 
         self._consecutive_fire_count = 0
@@ -92,6 +92,7 @@ class IncidentRuleEngine:
         current_time = time.time()
 
         # 1. Contabilizar persistencia temporal separada para fuego (1) y humo (0)
+        # Se utiliza decaimiento suave (count - 1) para tolerar la turbulencia y titileo natural del humo
         has_fire_now = False
         has_smoke_now = False
         if fire_detections is not None and len(fire_detections) > 0 and fire_detections.class_id is not None:
@@ -101,12 +102,12 @@ class IncidentRuleEngine:
         if has_fire_now:
             self._consecutive_fire_count += 1
         else:
-            self._consecutive_fire_count = 0
+            self._consecutive_fire_count = max(0, self._consecutive_fire_count - 1)
 
         if has_smoke_now:
             self._consecutive_smoke_count += 1
         else:
-            self._consecutive_smoke_count = 0
+            self._consecutive_smoke_count = max(0, self._consecutive_smoke_count - 1)
 
         fire_confirmed = self._consecutive_fire_count >= self.fire_persistence_frames
         smoke_confirmed = self._consecutive_smoke_count >= self.smoke_persistence_frames

@@ -34,8 +34,8 @@ class PipelineManager:
         default_source: str = "client_cam",
         camera_id: str = "camera_01",
         lang: str = "es",
-        fire_conf: float = 0.12,
-        smoke_conf: float = 0.18,
+        fire_conf: float = settings.DEFAULT_FIRE_CONF,
+        smoke_conf: float = settings.DEFAULT_SMOKE_CONF,
         vehicle_conf: float = settings.CONFIDENCE_THRESHOLD,
         track_persons: bool = True,
     ):
@@ -205,7 +205,7 @@ class PipelineManager:
         rule_engine = IncidentRuleEngine(
             cooldown_seconds=settings.INCIDENT_COOLDOWN_SECONDS,
             fire_persistence_frames=max(3, settings.CONSECUTIVE_FIRE_FRAMES_REQUIRED),
-            smoke_persistence_frames=3,
+            smoke_persistence_frames=2,
         )
         trace_annotator = sv.TraceAnnotator(
             thickness=2,

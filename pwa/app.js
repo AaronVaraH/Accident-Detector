@@ -1186,7 +1186,7 @@ function setupEventListeners() {
     fireSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('fire-conf-val');
-      const tag = val <= 0.20 ? ' (Alta)' : (val <= 0.45 ? ' (Media)' : ' (Baja)');
+      const tag = val <= 0.22 ? ' (Alta)' : (val <= 0.40 ? ' (Óptima / Sin Reflejos)' : ' (Estricta)');
       if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', fire_conf: val });
     });
@@ -1196,7 +1196,7 @@ function setupEventListeners() {
     smokeSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('smoke-conf-val');
-      const tag = val <= 0.20 ? ' (Alta)' : (val <= 0.45 ? ' (Media)' : ' (Baja)');
+      const tag = val <= 0.16 ? ' (Alta / Humo Tenue)' : (val <= 0.30 ? ' (Media)' : ' (Estricta)');
       if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', smoke_conf: val });
     });

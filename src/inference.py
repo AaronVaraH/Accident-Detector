@@ -70,14 +70,27 @@ class FireDetector:
     @staticmethod
     def _is_human_skin_or_colorful_object(crop: np.ndarray) -> bool:
         """
-        Determina si una caja candidata a humo es en realidad una mano humana en movimiento
-        rápido (motion blur) o ropa/objeto de alta saturación.
-        El humo real es acromático (gris/blanco/cenizo con muy baja saturación).
+        Determina si una caja candidata a humo es puramente una mano humana en movimiento
+        rápido (motion blur) o ropa/objeto sin ninguna presencia de humo.
+        Si la persona sostiene una hoja/papel quemándose, la caja contiene la mano Y el humo:
+        en ese caso NO se descarta porque hay humo real presente (área acromática difusa).
         """
         if crop.size == 0 or crop.shape[0] < 6 or crop.shape[1] < 6:
             return False
 
-        # 1. Filtro YCrCb para tono de piel humana
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        sat = hsv[:, :, 1]
+        val = hsv[:, :, 2]
+
+        # Verificar si hay una nube acromática compatible con humo (baja saturación, brillo medio-alto)
+        smoke_pixels = (sat <= 45) & (val >= 50) & (val <= 245)
+        smoke_ratio = np.count_nonzero(smoke_pixels) / float(crop.shape[0] * crop.shape[1])
+
+        # Si hay al menos un 15% de nube acromática difusa (humo visible), NO descartar aunque esté la mano presente
+        if smoke_ratio >= 0.15:
+            return False
+
+        # 1. Filtro YCrCb para tono de piel humana pura sin humo
         ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
         skin_mask = (
             (ycrcb[:, :, 1] >= 133)
@@ -86,16 +99,13 @@ class FireDetector:
             & (ycrcb[:, :, 2] <= 127)
         )
         skin_ratio = np.count_nonzero(skin_mask) / float(crop.shape[0] * crop.shape[1])
-        # Solo descartar si la mayor parte del recorte es piel humana pura sin presencia de humo
-        if skin_ratio >= 0.55:
-            return True  # Es piel humana (mano/brazo/cara) pura
+        if skin_ratio >= 0.70:
+            return True  # Es piel humana pura sin dispersión de humo
 
-        # 2. Filtro HSV para alta saturación (ropa u objetos plásticos intensos sin humo)
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        sat = hsv[:, :, 1]
+        # 2. Filtro HSV para alta saturación pura (ropa u objeto plástico sin humo)
         high_sat_ratio = np.count_nonzero(sat > 110) / float(crop.shape[0] * crop.shape[1])
-        if high_sat_ratio >= 0.45:
-            return True  # Ropa o plástico de saturación extrema, no humo
+        if high_sat_ratio >= 0.65:
+            return True  # Ropa o plástico de saturación extrema sin humo
 
         return False
 
@@ -103,7 +113,8 @@ class FireDetector:
     def _is_valid_flame_chroma(crop: np.ndarray) -> bool:
         """
         Determina si una región candidata a fuego tiene el perfil cromático y térmico de una llama real
-        (alta luminancia, gradiente cálido) tolerante a la compresión JPEG de cámaras móviles y navegadores.
+        (alta luminancia, gradiente cálido, halo de combustión) y descarta reflejos especulares,
+        luces blancas sobreexpuestas, lámparas uniformes y destellos de faros/pantallas.
         """
         if crop.size == 0 or crop.shape[0] < 4 or crop.shape[1] < 4:
             return False
@@ -114,44 +125,68 @@ class FireDetector:
         sat = hsv[:, :, 1]
         val = hsv[:, :, 2]
 
-        # 1. Región cálida incandescente/brillante
-        incandescent_mask = (val >= 180) & (r >= 150) & (g >= 60)
-        incandescent_ratio = np.count_nonzero(incandescent_mask) / float(crop.shape[0] * crop.shape[1])
+        total_pixels = float(crop.shape[0] * crop.shape[1])
 
-        # 2. Píxeles cálidos de espectro de llama (amarillo/naranja/rojo)
-        warm_flame_mask = (
-            (r.astype(np.int16) - b.astype(np.int16) >= 10)
-            & (r >= 110)
-            & (sat >= 15)
-            & ((hue <= 45) | (hue >= 150))
+        # 1. Píxeles de halo de combustión activo (Rojo/Naranja/Amarillo intenso característico de fuego vivo)
+        # R supera a B y G, con saturación y tono de combustión
+        combustion_mask = (
+            (r.astype(np.int16) - b.astype(np.int16) >= 40)
+            & (r.astype(np.int16) - g.astype(np.int16) >= 12)
+            & (r >= 135)
+            & (sat >= 35)
+            & ((hue <= 30) | (hue >= 165))
         )
-        warm_ratio = np.count_nonzero(warm_flame_mask) / float(crop.shape[0] * crop.shape[1])
+        combustion_ratio = np.count_nonzero(combustion_mask) / total_pixels
 
-        # Descarte de objetos neutros (ropa/pared blanca) sin presencia de espectro térmico
+        # 2. Píxeles cálidos incandescentes (centro de llama ámbar/amarillo brillante)
+        warm_core_mask = (
+            (r.astype(np.int16) - b.astype(np.int16) >= 25)
+            & (r >= 160)
+            & (g >= 90)
+            & (sat >= 20)
+            & (hue <= 35)
+        )
+        warm_core_ratio = np.count_nonzero(warm_core_mask) / total_pixels
+
+        # 3. Detección de reflejos especulares / luces blancas / sobreexposición plana
+        # Reflejo desaturado donde R, G y B son muy similares (blanco/gris plano de foco o brillo)
         white_glare_mask = (
-            (val >= 210)
-            & (np.abs(r.astype(np.int16) - b.astype(np.int16)) < 15)
-            & (sat < 20)
+            (val >= 195)
+            & (np.abs(r.astype(np.int16) - b.astype(np.int16)) < 25)
+            & (sat < 25)
         )
-        white_count = np.count_nonzero(white_glare_mask)
-        warm_count = np.count_nonzero(warm_flame_mask)
+        glare_ratio = np.count_nonzero(white_glare_mask) / total_pixels
 
-        # Si no hay absolutamente ningún píxel cálido ni núcleo incandescente, descartar
-        if warm_count == 0 and incandescent_ratio < 0.01:
+        # Si el recorte está dominado por reflejo blanco/desaturado sin suficiente combustión
+        if glare_ratio >= 0.40 and combustion_ratio < 0.08:
             return False
 
-        # Si es un objeto completamente blanco plano sin gradiente cálido en bordes
-        if warm_count < 2 and white_count > 15:
-            return False
+        # Si es un parche plano sin gradiente térmico espacial (lámpara, foco o superficie uniforme)
+        # Las llamas reales tienen varianza espacial por turbulencia, excepto si es un recorte puro
+        # de llama roja/naranja extrema (R - G >= 70 y R - B >= 100).
+        std_r = float(np.std(r))
+        std_g = float(np.std(g))
+        if std_r < 8.0 and std_g < 8.0:
+            mean_rg = float(np.mean(r.astype(np.int16) - g.astype(np.int16)))
+            mean_rb = float(np.mean(r.astype(np.int16) - b.astype(np.int16)))
+            if mean_rg < 70 or mean_rb < 100:
+                return False  # Luz artificial o superficie plana uniforme
 
-        return warm_ratio >= 0.015 or incandescent_ratio >= 0.008
+        # Para ser considerada llama real:
+        # Debe tener un porcentaje sólido de combustión cálida o núcleo cálido con halo
+        if combustion_ratio >= 0.04:
+            return True
+        if warm_core_ratio >= 0.10 and combustion_ratio >= 0.015:
+            return True
+
+        return False
 
     def __init__(
         self,
         model_path: str = settings.FIRE_SMOKE_MODEL_PATH,
         lighter_model_path: str = settings.LIGHTER_FLAME_MODEL_PATH,
-        fire_conf: float = 0.12,
-        smoke_conf: float = 0.18,
+        fire_conf: float = settings.DEFAULT_FIRE_CONF,
+        smoke_conf: float = settings.DEFAULT_SMOKE_CONF,
         enable_focal_lighter: bool = True,
     ):
         self.fire_conf = fire_conf
@@ -185,8 +220,9 @@ class FireDetector:
     def detect(self, frame) -> Tuple[sv.Detections, List[str]]:
         """
         Ejecuta la inferencia dual con rechazo de falsos positivos ópticos:
-        - Descarta motion blur de manos mediante análisis cromático de piel humana.
-        - Descarta reflejos de luz blanca en objetos claros mediante validación térmica (R vs B).
+        - Descarta motion blur de manos y ropa pura, pero conserva humo sostenido con manos.
+        - Descarta reflejos de luz blanca, lámparas y focos mediante validación espectral y gradiente térmico.
+        - Aplica realce adaptativo local CLAHE en fondos claros para resaltar humo translúcido tenue.
         """
         if self.model is None:
             return sv.Detections.empty(), []
@@ -197,10 +233,22 @@ class FireDetector:
         labels_list = []
         class_ids_list = []
 
+        # Si el fondo promedio es claro, el humo blanco/gris pierde contraste con el fondo.
+        # CLAHE adaptativo local permite revelar la textura y contornos del humo sobre fondos claros.
+        inference_frame = frame
+        mean_val = cv2.mean(frame)[:3]
+        avg_lum = (mean_val[0] + mean_val[1] + mean_val[2]) / 3.0
+        if avg_lum >= 125:
+            lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+            cl = clahe.apply(l_ch)
+            inference_frame = cv2.cvtColor(cv2.merge((cl, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+
         # 1. Inferencia del Modelo Primario
         min_conf = min(self.fire_conf, self.smoke_conf)
         results = self.model(
-            source=frame,
+            source=inference_frame,
             conf=min_conf,
             device=settings.DEVICE,
             imgsz=384,
@@ -215,10 +263,10 @@ class FireDetector:
             bx2, by2 = min(w, max(bx1 + 1, bx2)), min(h, max(by1 + 1, by2))
             crop_cand = frame[by1:by2, bx1:bx2]
 
-            # Filtro para HUMO: Rechaza motion blur de manos y ropa
+            # Filtro para HUMO: Admite humo tenue sobre fondo claro y con manos presentes
             if cls_name == "smoke" and conf >= self.smoke_conf:
                 if self._is_human_skin_or_colorful_object(crop_cand):
-                    logger.debug(f"Descartado falso humo por motion blur de piel (conf: {conf:.2f})")
+                    logger.debug(f"Descartado falso humo por motion blur de piel pura (conf: {conf:.2f})")
                     continue
 
                 boxes_list.append([bx1, by1, bx2, by2])
@@ -226,7 +274,7 @@ class FireDetector:
                 labels_list.append(f"HUMO ({conf:.2f})")
                 class_ids_list.append(0)
 
-            # Filtro para FUEGO: Rechaza ropa naranja/roja y reflejos de luz
+            # Filtro para FUEGO: Rechaza luces fuertes, reflejos y ropa
             elif cls_name == "fire" and conf >= self.fire_conf:
                 if not self._is_valid_flame_chroma(crop_cand):
                     logger.debug(f"Descartado falso fuego por falta de incandescencia (conf: {conf:.2f})")
@@ -240,7 +288,7 @@ class FireDetector:
         # 2. Localizador de Llamas y Encendedores (ONNX especializado en cuerpo y llama)
         has_fire = any(cid == 1 for cid in class_ids_list)
         if not has_fire and self.enable_focal_lighter and self.lighter_model is not None:
-            l_conf_thresh = min(0.25, self.fire_conf)
+            l_conf_thresh = max(0.30, self.fire_conf)
             l_res = self.lighter_model(frame, conf=l_conf_thresh, imgsz=384, verbose=False)[0]
             for lb in l_res.boxes:
                 lname = self.lighter_model.names[int(lb.cls[0])].lower()

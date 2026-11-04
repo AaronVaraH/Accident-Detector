@@ -15,8 +15,8 @@ logger = logging.getLogger("MicroserviceClient")
 
 class IncidentMicroserviceClient:
     def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None):
-        self.base_url = (base_url or settings.ENRICHMENT_SERVICE_URL).rstrip("/")
-        self.api_key = api_key or settings.ENRICHMENT_SERVICE_API_KEY
+        self.base_url = (base_url or getattr(settings, "ENRICHMENT_SERVICE_URL", "http://localhost:8001")).rstrip("/")
+        self.api_key = api_key or getattr(settings, "ENRICHMENT_SERVICE_API_KEY", "titan-secret-key-2026")
         self.timeout = 5.0
 
     @property

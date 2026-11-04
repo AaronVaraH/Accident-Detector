@@ -63,3 +63,7 @@ TWILIO_TO_PHONE = os.getenv("TWILIO_TO_PHONE", "+526142284522").strip("\"'")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "1d02888ced53939cfb4ad98524afabf3").strip("\"'")
 MAPS_API_KEY = os.getenv("MAPS_API_KEY", "AIzaSyCLf2qNzSxdkC3oHBhII4SOs4hr2d4FQno").strip("\"'")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "3e7c63042dmshbeb5ebcd95d91a8p12d05cjsn05dae14f16ea").strip("\"'")
+
+# Microservicio de Enriquecimiento Situacional y Despacho CAD 911
+ENRICHMENT_SERVICE_URL = os.getenv("ENRICHMENT_SERVICE_URL", "http://localhost:8001").strip("\"'")
+ENRICHMENT_SERVICE_API_KEY = os.getenv("ENRICHMENT_SERVICE_API_KEY", "titan-secret-key-2026").strip("\"'")

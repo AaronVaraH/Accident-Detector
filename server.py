@@ -28,6 +28,7 @@ from src.pipeline_manager import pipeline_manager
 from src.plate_detector import license_plate_detector
 from src.enrichment import vehicle_service, weather_service, location_service, enrichment_aggregator
 from src.dispatcher import alert_dispatcher
+from src.microservice_client import incident_microservice_client
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -428,6 +429,23 @@ def post_simulate_dispatch(payload: DispatchSimulationPayload):
         subtitle=payload.subtitle,
         plate=payload.plate,
     )
+
+    # Consumir el Microservicio REST de Enriquecimiento y Despacho
+    ms_dossier = incident_microservice_client.evaluate_and_dispatch(
+        camera_id="CAM-CDMX-PERIFERICO-04",
+        incident_type=payload.incident_type,
+        confidence=0.92,
+        telemetry={
+            "initial_speed_kmh": 65.0,
+            "impact_speed_kmh": 0.0,
+            "delta_time_sec": 0.45,
+            "has_fire": "fuego" in payload.incident_type.lower(),
+            "has_smoke": "humo" in payload.incident_type.lower() or "fuego" in payload.incident_type.lower(),
+        },
+        detected_plate=payload.plate,
+    )
+    dispatch["microservice_dossier"] = ms_dossier
+
     sms_result = alert_dispatcher.dispatch_incident_alert(dispatch)
     dispatch["dispatch_status"] = sms_result
     return JSONResponse(content=dispatch)

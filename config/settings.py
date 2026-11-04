@@ -30,6 +30,8 @@ CAMERAS_CONFIG_PATH = CONFIG_DIR / "cameras.json"
 DEVICE = os.getenv("DEVICE", "cpu")
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.28"))
 IOU_THRESHOLD = float(os.getenv("IOU_THRESHOLD", "0.50"))
+DEFAULT_FIRE_CONF = float(os.getenv("DEFAULT_FIRE_CONF", "0.32"))
+DEFAULT_SMOKE_CONF = float(os.getenv("DEFAULT_SMOKE_CONF", "0.14"))
 
 # --- Roboflow Inference Model IDs ---
 ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "moEFeCNxkkmLAaSBo2dr").strip("\"'")

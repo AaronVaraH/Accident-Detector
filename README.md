@@ -49,6 +49,12 @@ python tests/generate_test_video.py
   ```
   Accede desde cualquier navegador o teléfono en tu red local en: `http://localhost:8000` (o la IP local de tu PC) e instálala con el botón **"INSTALAR PWA"**.
 
+- **Iniciar Microservicio REST de Enriquecimiento y Despacho:**
+  ```powershell
+  python -m uvicorn services.incident_enrichment_service.main:app --port 8001 --reload
+  ```
+  Documentación de endpoints y pruebas: 👉 **[services/incident_enrichment_service/README.md](services/incident_enrichment_service/README.md)**
+
 - **Guardando salida anotada:**
   ```powershell
   python main.py --source tests/video_samples/sample_traffic.mp4 --output tests/video_samples/output_annotated.mp4

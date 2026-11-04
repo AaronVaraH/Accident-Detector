@@ -1,0 +1,105 @@
+### ==============================================================================
+### Colección de Pruebas HTTP: Incident Enrichment & Dispatch Microservice
+### Base URL: http://localhost:8001
+### ==============================================================================
+
+@baseUrl = http://localhost:8001
+@apiKey = titan-secret-key-2026
+
+### 1. Monitoreo de Salud del Servicio (Público)
+GET {{baseUrl}}/health
+Accept: application/json
+
+
+### 2. Evaluar y Despachar Incidente - ÉXITO (Protegido con X-API-Key)
+POST {{baseUrl}}/api/v1/incidents/evaluate-and-dispatch
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "camera_id": "CAM-CDMX-PERIFERICO-04",
+  "incident_type": "colision_critica",
+  "confidence": 0.94,
+  "telemetry": {
+    "initial_speed_kmh": 78.5,
+    "impact_speed_kmh": 0.0,
+    "delta_time_sec": 0.38,
+    "has_fire": false,
+    "has_smoke": true
+  },
+  "latitude": 19.3012,
+  "longitude": -99.1824,
+  "detected_plate": "ABC-1234",
+  "frame_snapshot_url": "https://storage.incidentdetector.io/snapshots/20261021/snap_cam04_9921.jpg"
+}
+
+
+### 3. Evaluar y Despachar Incidente - ERROR 401 UNAUTHORIZED (Sin Header X-API-Key)
+POST {{baseUrl}}/api/v1/incidents/evaluate-and-dispatch
+Content-Type: application/json
+
+{
+  "camera_id": "CAM-CDMX-PERIFERICO-04",
+  "incident_type": "colision_critica",
+  "confidence": 0.94,
+  "telemetry": {
+    "initial_speed_kmh": 78.5,
+    "impact_speed_kmh": 0.0,
+    "delta_time_sec": 0.38
+  }
+}
+
+
+### 4. Evaluar y Despachar Incidente - ERROR 401 UNAUTHORIZED (Key Inválida)
+POST {{baseUrl}}/api/v1/incidents/evaluate-and-dispatch
+Content-Type: application/json
+X-API-Key: clave_incorrecta_xyz
+
+{
+  "camera_id": "CAM-CDMX-PERIFERICO-04",
+  "incident_type": "colision_critica",
+  "confidence": 0.94,
+  "telemetry": {
+    "initial_speed_kmh": 78.5,
+    "impact_speed_kmh": 0.0,
+    "delta_time_sec": 0.38
+  }
+}
+
+
+### 5. Evaluar y Despachar Incidente - ERROR 400 BAD REQUEST (Validación sin Stack Trace)
+POST {{baseUrl}}/api/v1/incidents/evaluate-and-dispatch
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "camera_id": "",
+  "incident_type": "x",
+  "confidence": 1.99,
+  "telemetry": {
+    "initial_speed_kmh": -20.0,
+    "impact_speed_kmh": 500.0,
+    "delta_time_sec": -1.0
+  }
+}
+
+
+### 6. Consultar Expediente Situacional por ID - ÉXITO (Público)
+GET {{baseUrl}}/api/v1/incidents/INC-2026-004812/dossier
+Accept: application/json
+
+
+### 7. Consultar Expediente Situacional - ERROR 404 NOT FOUND
+GET {{baseUrl}}/api/v1/incidents/INC-INEXISTENTE-9999/dossier
+Accept: application/json
+
+
+### 8. Consultar Riesgos Ambientales y Meteorología - ÉXITO (Público)
+GET {{baseUrl}}/api/v1/environmental-hazards?lat=19.4326&lon=-99.1332&has_fire=false
+Accept: application/json
+
+
+### 9. Consultar Riesgos Ambientales - ERROR 400 BAD REQUEST (Coordenadas Inválidas)
+GET {{baseUrl}}/api/v1/environmental-hazards?lat=999.0&lon=-99.1332
+Accept: application/json
+

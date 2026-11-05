@@ -93,5 +93,11 @@ MAPS_API_KEY = os.getenv("MAPS_API_KEY", "").strip("\"'")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip("\"'")
 
 # Microservicio de Enriquecimiento Situacional y Despacho CAD 911
-ENRICHMENT_SERVICE_URL = os.getenv("ENRICHMENT_SERVICE_URL", "http://localhost:8001").strip("\"'")
-ENRICHMENT_SERVICE_API_KEY = os.getenv("ENRICHMENT_SERVICE_API_KEY", "titan-secret-key-2026").strip("\"'")
+ENRICHMENT_SERVICE_URL = os.getenv(
+    "ENRICHMENT_SERVICE_URL",
+    "https://titan-enrichment-microservice.onrender.com",
+).strip("\"'").rstrip("/")
+ENRICHMENT_SERVICE_API_KEY = os.getenv(
+    "ENRICHMENT_SERVICE_API_KEY",
+    "titan-secret-key-2026",
+).strip("\"'")

@@ -47,6 +47,6 @@ services:
       - key: TWILIO_TO_PHONE
         sync: false
       - key: ENRICHMENT_SERVICE_URL
-        sync: false
+        value: https://titan-enrichment-microservice.onrender.com
       - key: ENRICHMENT_SERVICE_API_KEY
         value: titan-secret-key-2026

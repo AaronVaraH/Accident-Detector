@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>TITAN // Historial Forense & Expedientes Microservicio (/historial)</title>
+  <meta name="theme-color" content="#070a11">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="/static/lucide.min.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=9">
+  <style>
+    .history-container {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 1580px;
+      margin: 0 auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+    .history-stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.85rem;
+    }
+    .history-grid {
+      display: grid;
+      grid-template-columns: 1.45fr 1fr;
+      gap: 1.15rem;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .history-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .filter-toolbar {
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+    }
+    .filter-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .incidents-table-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      max-height: 680px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .history-card {
+      background: rgba(11, 18, 33, 0.86);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--alert-red);
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .history-card:hover {
+      border-color: var(--cyan-primary);
+      background: rgba(0, 240, 255, 0.06);
+      transform: translateY(-1px);
+    }
+    .history-card.status-resuelto {
+      border-left-color: var(--emerald-live);
+    }
+    .history-card.status-en_atencion {
+      border-left-color: var(--cyan-primary);
+    }
+    .history-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .history-card-id {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--cyan-primary);
+      font-weight: 700;
+    }
+    .history-card-title {
+      font-family: var(--font-display);
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .history-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .evidence-thumb {
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      margin-top: 0.4rem;
+    }
+  </style>
+</head>
+<body class="tactical-body">
+  <div class="background-grid"></div>
+  <div class="scanlines-overlay"></div>
+
+  <!-- Header Táctico -->
+  <header class="tactical-header">
+    <div class="header-brand">
+      <div class="radar-badge">
+        <span class="radar-ping"></span>
+        <i data-lucide="database" class="brand-icon"></i>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">TITAN <span class="highlight">HISTORIAL & BACKLOG</span></h1>
+        <p class="brand-subtitle">AUDITORÍA FORENSE POSTGRESQL + VERCEL BLOB & MICROSERVICIO CAD-911</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <span class="header-status-pill" id="hist-db-pill">
+        <span class="status-dot"></span>
+        <span id="hist-db-status-txt">POSTGRESQL + BLOB</span>
+      </span>
+      <a href="/" class="action-btn" style="text-decoration:none; border-color:var(--cyan-primary); color:var(--cyan-primary);">
+        <i data-lucide="video"></i>
+        <span>VOLVER AL MONITOR EN VIVO</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="history-container">
+    <!-- Métricas Globales del Backlog -->
+    <section class="history-stats-row">
+      <div class="metric-card metric-incidents">
+        <div class="card-icon"><i data-lucide="shield-alert"></i></div>
+        <div class="card-info">
+          <div class="card-title">TOTAL SINIESTROS</div>
+          <div class="card-value" id="stat-total-incidents">0</div>
+        </div>
+      </div>
+      <div class="metric-card metric-fire">
+        <div class="card-icon"><i data-lucide="clock"></i></div>
+        <div class="card-info">
+          <div class="card-title">PENDIENTES / EN ATENCIÓN</div>
+          <div class="card-value" id="stat-pending-incidents">0</div>
+        </div>
+      </div>
+      <div class="metric-card metric-persons">
+        <div class="card-icon"><i data-lucide="check-circle-2"></i></div>
+        <div class="card-info">
+          <div class="card-title">RESUELTOS</div>
+          <div class="card-value" id="stat-resolved-incidents">0</div>
+        </div>
+      </div>
+      <div class="metric-card metric-plates">
+        <div class="card-icon"><i data-lucide="scan-line"></i></div>
+        <div class="card-info">
+          <div class="card-title">PLACAS EN BACKLOG</div>
+          <div class="card-value" id="stat-total-plates">0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Barra de Filtros, Sincronización y Exportación -->
+    <section class="filter-toolbar">
+      <div class="filter-group">
+        <select id="filter-status" class="control-select">
+          <option value="">TODOS LOS ESTADOS</option>
+          <option value="PENDIENTE">PENDIENTE</option>
+          <option value="EN_ATENCION">EN ATENCIÓN</option>
+          <option value="RESUELTO">RESUELTO</option>
+        </select>
+        <select id="filter-type" class="control-select">
+          <option value="">TODOS LOS TIPOS</option>
+          <option value="colision_critica">COLISIÓN CRÍTICA</option>
+          <option value="fuego_confirmado">FUEGO CONFIRMADO</option>
+          <option value="humo_detectado">HUMO DETECTADO</option>
+        </select>
+        <button class="action-btn" id="btn-sync-cloud" title="Sincronizar con PostgreSQL en la nube">
+          <i data-lucide="refresh-cw"></i>
+          <span>SINCRONIZAR NUBE</span>
+        </button>
+        <button class="action-btn btn-search" id="btn-simulate-cad" title="Generar y despachar nuevo expediente en el Microservicio CAD-911">
+          <i data-lucide="siren"></i>
+          <span>NUEVO DESPACHO CAD-911</span>
+        </button>
+      </div>
+
+      <div class="filter-group">
+        <a href="/api/backlog/export?format=csv&target=incidents" class="action-btn" style="text-decoration:none;" download>
+          <i data-lucide="download"></i>
+          <span>EXPORTAR SINIESTROS (CSV)</span>
+        </a>
+        <a href="/api/backlog/export?format=csv&target=plates" class="action-btn" style="text-decoration:none;" download>
+          <i data-lucide="credit-card"></i>
+          <span>EXPORTAR PLACAS (CSV)</span>
+        </a>
+        <a href="/api/backlog/export?format=json" class="action-btn" style="text-decoration:none;" download>
+          <i data-lucide="file-json"></i>
+          <span>JSON COMPLETO</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Cuerpo Principal: Lista de Siniestros (Izquierda) + Expediente Detallado del Microservicio y Placas (Derecha) -->
+    <div class="history-grid">
+      <!-- Columna Izquierda: Registro de Siniestros en Base de Datos -->
+      <div class="blackbox-panel">
+        <div class="panel-header-split">
+          <div>
+            <h3 class="panel-heading">
+              <i data-lucide="clipboard-list" class="panel-icon-svg"></i>
+              <span>BITÁCORA FORENSE DE SINIESTROS (BACKLOG)</span>
+            </h3>
+            <p class="panel-desc">Haz clic en cualquier incidente para inspeccionar su expediente situacional del Microservicio y cambiar su estado.</p>
+          </div>
+        </div>
+        <div class="incidents-table-wrap" id="history-incidents-list">
+          <div class="empty-state">Cargando registros desde la base de datos...</div>
+        </div>
+      </div>
+
+      <!-- Columna Derecha: Inspector de Expediente del Microservicio + Historial de Placas -->
+      <div style="display:flex; flex-direction:column; gap:1.15rem;">
+        <!-- Inspector Visual de Expediente Situacional (Microservicio REST) -->
+        <div class="plates-panel">
+          <div class="panel-header-split">
+            <h3 class="panel-heading">
+              <i data-lucide="shield-check" class="panel-icon-svg"></i>
+              <span>EXPEDIENTE SITUACIONAL (MICROSERVICIO REST)</span>
+            </h3>
+            <span class="alpr-model-tag" id="dossier-ticket-tag">SELECCIONA UN REGISTRO</span>
+          </div>
+
+          <!-- Buscador por ID de Expediente (ej. INC-2026-004812) -->
+          <div class="plate-search-box">
+            <div class="search-input-wrapper">
+              <i data-lucide="search" class="search-icon-svg"></i>
+              <input type="text" id="dossier-id-input" placeholder="ID de Incidente (ej: INC-2026-004812)" class="tactical-input" value="INC-2026-004812">
+            </div>
+            <button class="action-btn btn-search" id="btn-fetch-dossier">CONSULTAR DOSSIER</button>
+          </div>
+
+          <div class="vehicle-dossier" id="detailed-dossier-view" style="display:flex;">
+            <div class="dossier-header">
+              <div class="dossier-plate-badge" id="det-inc-id" style="font-size:0.9rem;">INC-2026-004812</div>
+              <div class="dossier-status" id="det-inc-severity">ALTO</div>
+            </div>
+            <div class="dossier-grid">
+              <div class="dossier-item"><span class="lbl">Ticket Despacho CAD:</span> <strong id="det-cad-ticket" class="fuel-badge">CAD-911-MEX-88192</strong></div>
+              <div class="dossier-item"><span class="lbl">Estado Operativo:</span> <strong id="det-status">EN_ATENCION_MEDICA</strong></div>
+              <div class="dossier-item"><span class="lbl">Cámara / Sensor:</span> <strong id="det-camera">CAM-CDMX-PERIFERICO-04</strong></div>
+              <div class="dossier-item"><span class="lbl">Placa / Vehículo:</span> <strong id="det-vehicle">ABC-1234 (Nissan Versa)</strong></div>
+              <div class="dossier-item"><span class="lbl">Cinemática Impacto:</span> <strong id="det-kinematics">78.5 km/h → 0.0 km/h (0.38s)</strong></div>
+              <div class="dossier-item"><span class="lbl">Clima & Viento:</span> <strong id="det-weather">17.5°C | 22.4 km/h</strong></div>
+              <div class="dossier-item"><span class="lbl">Dispersión Humo:</span> <strong id="det-smoke">Noreste (NE)</strong></div>
+              <div class="dossier-item"><span class="lbl">Estado Pavimento:</span> <strong id="det-pavement">Pavimento Mojado</strong></div>
+            </div>
+            <div id="det-snapshot-container" style="display:none;">
+              <img id="det-snapshot-img" class="evidence-thumb" src="" alt="Evidencia Fotográfica Vercel Blob">
+            </div>
+          </div>
+        </div>
+
+        <!-- Historial de Placas Detectadas (ALPR Backlog) -->
+        <div class="plates-panel">
+          <div class="panel-header-split">
+            <h3 class="panel-heading">
+              <i data-lucide="scan-line" class="panel-icon-svg"></i>
+              <span>HISTORIAL DE PLACAS DETECTADAS (ALPR)</span>
+            </h3>
+            <span class="alpr-model-tag" id="hist-plates-badge">0 PLACAS</span>
+          </div>
+          <div class="recent-plates-feed" id="history-plates-list" style="max-height:260px;">
+            <div class="empty-state">Sin placas registradas en el backlog.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function loadFullBacklog(syncCloud = false) {
+      const statusFilter = document.getElementById('filter-status').value;
+      const typeFilter = document.getElementById('filter-type').value;
+      const params = new URLSearchParams({ limit: '150' });
+      if (statusFilter) params.set('status', statusFilter);
+      if (typeFilter) params.set('incident_type', typeFilter);
+      if (syncCloud) params.set('sync', 'true');
+
+      try {
+        const res = await fetch(`/api/backlog?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const db = data.database || {};
+        const incidents = data.incidents || [];
+        const plates = data.plates || [];
+
+        // Actualizar estado DB en el header
+        const dbTxt = document.getElementById('hist-db-status-txt');
+        if (dbTxt) {
+          dbTxt.textContent = db.connected
+            ? `POSTGRES + BLOB ACTIVO (${incidents.length})`
+            : `MODO ESPEJO ACTIVO (${incidents.length})`;
+        }
+
+        // Estadísticas
+        document.getElementById('stat-total-incidents').textContent = incidents.length;
+        const pendingCount = incidents.filter(i => (i.status || '').toUpperCase() !== 'RESUELTO').length;
+        const resolvedCount = incidents.filter(i => (i.status || '').toUpperCase() === 'RESUELTO').length;
+        document.getElementById('stat-pending-incidents').textContent = pendingCount;
+        document.getElementById('stat-resolved-incidents').textContent = resolvedCount;
+        document.getElementById('stat-total-plates').textContent = plates.length;
+        document.getElementById('hist-plates-badge').textContent = `${plates.length} PLACAS`;
+
+        renderHistoryIncidents(incidents);
+        renderHistoryPlates(plates);
+      } catch (err) {
+        console.error('Error cargando /historial:', err);
+      }
+    }
+
+    function renderHistoryIncidents(incidents) {
+      const container = document.getElementById('history-incidents-list');
+      if (!incidents || incidents.length === 0) {
+        container.innerHTML = `<div class="empty-state">No hay incidentes registrados con los filtros actuales.</div>`;
+        return;
+      }
+
+      let html = '';
+      incidents.forEach((inc) => {
+        const incId = inc.incident_id || `ID-${inc.id || ''}`;
+        const status = (inc.status || 'PENDIENTE').toUpperCase();
+        const statusClass = `status-${status.toLowerCase()}`;
+        const statusColor = status === 'RESUELTO' ? '#00ff88' : (status === 'EN_ATENCION' ? '#00f0ff' : '#ffb700');
+        const veh = inc.vehicle_data || inc.vehicle || {};
+        const vehDesc = veh.brand ? `${veh.brand} ${veh.model || ''}` : '';
+        const plateBadge = inc.plate ? `<span class="chip-plate-tag">🚘 ${inc.plate} ${vehDesc}</span>` : '';
+        const ticketBadge = inc.dispatch_ticket_id ? `<span class="chip-plate-tag" style="border-color:#00ff88;color:#00ff88;">🎫 ${inc.dispatch_ticket_id}</span>` : '';
+        const snapBadge = inc.snapshot_url ? `<a href="${inc.snapshot_url}" target="_blank" onclick="event.stopPropagation();" class="chip-plate-tag" style="text-decoration:none;">📸 EVIDENCIA BLOB</a>` : '';
+
+        html += `
+          <div class="history-card ${statusClass}" onclick="inspectIncidentDossier('${incId}')">
+            <div class="history-card-top">
+              <span class="history-card-id">${incId}</span>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <span class="chip-plate-tag" onclick="event.stopPropagation(); cycleStatus('${incId}', '${status}')" style="cursor:pointer; border-color:${statusColor}; color:${statusColor};" title="Clic para cambiar estado">
+                  ${status} ↻
+                </span>
+                <span class="item-time">${inc.created_at ? inc.created_at.replace('T', ' ').slice(0, 19) : inc.timestamp}</span>
+              </div>
+            </div>
+            <div class="history-card-title">${inc.title || 'SINIESTRO VIAL'}</div>
+            <div class="item-sub">${inc.subtitle || ''}</div>
+            <div class="history-card-meta">
+              <span>📹 ${inc.camera_id || 'camera_01'}</span>
+              <span>⚡ Severidad: <strong>${inc.severity || 'ALTO'}</strong></span>
+              ${plateBadge}
+              ${ticketBadge}
+              ${snapBadge}
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderHistoryPlates(plates) {
+      const container = document.getElementById('history-plates-list');
+      if (!plates || plates.length === 0) {
+        container.innerHTML = `<div class="empty-state">No hay placas registradas aún.</div>`;
+        return;
+      }
+      let html = '';
+      plates.forEach((p) => {
+        const v = p.vehicle_data || {};
+        const thumb = p.thumbnail_url
+          ? `<a href="${p.thumbnail_url}" target="_blank"><img src="${p.thumbnail_url}" class="plate-feed-thumb" alt="${p.plate}"></a>`
+          : '';
+        html += `
+          <div class="plate-feed-item">
+            <div class="plate-feed-left">
+              ${thumb}
+              <div>
+                <div class="plate-feed-tag">${p.plate}</div>
+                <div class="plate-feed-veh">${v.brand || 'Vehículo'} ${v.model || ''} (${v.fuel_type || 'Gasolina'})</div>
+              </div>
+            </div>
+            <span class="alpr-model-tag">${Math.round((p.confidence || 0.85) * 100)}%</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    async function cycleStatus(incidentId, currentStatus) {
+      const order = ['PENDIENTE', 'EN_ATENCION', 'RESUELTO'];
+      const nextStatus = order[(order.indexOf(currentStatus) + 1) % order.length] || 'EN_ATENCION';
+      try {
+        const res = await fetch(`/api/backlog/incidents/${encodeURIComponent(incidentId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        });
+        if (res.ok) {
+          loadFullBacklog(false);
+        }
+      } catch (e) {
+        console.error('Error actualizando estado:', e);
+      }
+    }
+
+    async function inspectIncidentDossier(incidentId) {
+      document.getElementById('dossier-id-input').value = incidentId;
+      try {
+        const res = await fetch(`/api/enrichment/dossier/${encodeURIComponent(incidentId)}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        renderDossierDetails(d);
+      } catch (e) {
+        console.error('Error consultando dossier:', e);
+      }
+    }
+
+    function renderDossierDetails(d) {
+      const enr = d.enrichment || {};
+      const ms = enr.microservice_dossier || d;
+      const envRisk = ms.environmental_risk || enr.weather || {};
+      const tel = ms.telemetry || d.telemetry || {};
+      const veh = d.vehicle_data || d.vehicle || ms.vehicle_info || {};
+
+      document.getElementById('det-inc-id').textContent = d.incident_id || ms.incident_id || '---';
+      document.getElementById('det-inc-severity').textContent = d.severity || ms.severity_level || 'CRÍTICO';
+      document.getElementById('det-cad-ticket').textContent = d.dispatch_ticket_id || ms.dispatch_ticket_id || 'CAD-911-ACTIVO';
+      document.getElementById('dossier-ticket-tag').textContent = d.dispatch_ticket_id || ms.dispatch_ticket_id || 'EXPEDIENTE VERIFICADO';
+      document.getElementById('det-status').textContent = d.status || ms.status || 'PENDIENTE';
+      document.getElementById('det-camera').textContent = d.camera_id || ms.camera_id || 'camera_01';
+
+      const plateStr = d.plate || veh.plate || 'NO VISIBLE';
+      const brandModel = `${veh.brand || ''} ${veh.model || ''}`.trim();
+      document.getElementById('det-vehicle').textContent = brandModel ? `${plateStr} (${brandModel})` : plateStr;
+
+      if (tel.initial_speed_kmh !== undefined) {
+        document.getElementById('det-kinematics').textContent = `${tel.initial_speed_kmh} km/h → ${tel.impact_speed_kmh || 0} km/h (${tel.delta_time_sec || 0.4}s)`;
+      } else {
+        document.getElementById('det-kinematics').textContent = `Energía óptica: ${tel.motion_energy || 0} | FPS: ${tel.fps || 25}`;
+      }
+
+      const temp = envRisk.temperature_c !== undefined ? `${envRisk.temperature_c}°C` : '21°C';
+      const wind = envRisk.wind_speed_kmh !== undefined ? `${envRisk.wind_speed_kmh} km/h` : '12 km/h';
+      document.getElementById('det-weather').textContent = `${temp} | ${wind} (${envRisk.weather_condition || envRisk.description || 'Despejado'})`;
+      document.getElementById('det-smoke').textContent = envRisk.smoke_dispersion_direction || 'Noreste (NE)';
+      document.getElementById('det-pavement').textContent = envRisk.pavement_status || envRisk.pavement_risk || 'Pavimento Seco';
+
+      const snapContainer = document.getElementById('det-snapshot-container');
+      const snapImg = document.getElementById('det-snapshot-img');
+      const snapUrl = d.snapshot_url || veh.snapshot_url;
+      if (snapUrl) {
+        snapContainer.style.display = 'block';
+        snapImg.src = snapUrl;
+      } else {
+        snapContainer.style.display = 'none';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFullBacklog(true);
+      inspectIncidentDossier('INC-2026-004812');
+
+      document.getElementById('filter-status').addEventListener('change', () => loadFullBacklog(false));
+      document.getElementById('filter-type').addEventListener('change', () => loadFullBacklog(false));
+      document.getElementById('btn-sync-cloud').addEventListener('click', () => loadFullBacklog(true));
+      document.getElementById('btn-fetch-dossier').addEventListener('click', () => {
+        const val = document.getElementById('dossier-id-input').value.trim();
+        if (val) inspectIncidentDossier(val);
+      });
+
+      document.getElementById('btn-simulate-cad').addEventListener('click', async () => {
+        const res = await fetch('/api/enrichment/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            incident_type: 'colision_critica',
+            title: 'COLISIÓN VEHICULAR CONFIRMADA',
+            subtitle: 'Desaceleración severa evaluada por Microservicio CAD-911',
+            plate: 'XYZ-789-A',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const incId = (data.microservice_dossier && data.microservice_dossier.incident_id) || data.event_id;
+          await loadFullBacklog(false);
+          if (incId) inspectIncidentDossier(incId);
+        }
+      });
+
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
+

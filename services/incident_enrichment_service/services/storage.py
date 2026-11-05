@@ -6,7 +6,10 @@ para demostraciones y pruebas de auditoría.
 
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from ..models import IncidentDossierResponse, IncidentTelemetry, EnvironmentalRisk
+try:
+    from ..models import IncidentDossierResponse, IncidentTelemetry, EnvironmentalRisk
+except ImportError:
+    from models import IncidentDossierResponse, IncidentTelemetry, EnvironmentalRisk
 
 
 class IncidentStorage:
@@ -60,6 +63,29 @@ class IncidentStorage:
 
     def save(self, dossier: IncidentDossierResponse) -> IncidentDossierResponse:
         self._dossiers[dossier.incident_id] = dossier
+        try:
+            from src.database import backlog_db
+            backlog_db.record_incident({
+                "incident_id": dossier.incident_id,
+                "created_at": dossier.timestamp.isoformat(),
+                "incident_type": "colision_critica" if not dossier.telemetry.has_fire else "fuego_confirmado",
+                "severity": dossier.severity_level,
+                "status": dossier.status,
+                "title": f"EXPEDIENTE {dossier.incident_id}",
+                "subtitle": f"Cámara {dossier.camera_id} | {dossier.environmental_risk.weather_condition}",
+                "camera_id": dossier.camera_id,
+                "plate": (dossier.vehicle_info or {}).get("plate"),
+                "vehicle_data": dossier.vehicle_info or {},
+                "telemetry": dossier.telemetry.model_dump() if hasattr(dossier.telemetry, "model_dump") else {},
+                "enrichment": {
+                    "location": dossier.location,
+                    "environmental_risk": dossier.environmental_risk.model_dump() if hasattr(dossier.environmental_risk, "model_dump") else {},
+                },
+                "dispatch_ticket_id": dossier.dispatch_ticket_id,
+                "dispatch_status": dossier.dispatch_status,
+            })
+        except Exception:
+            pass
         return dossier
 
     def get(self, incident_id: str) -> Optional[IncidentDossierResponse]:

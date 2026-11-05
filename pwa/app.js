@@ -608,7 +608,7 @@ function requestUserLocation() {
   }
 }
 
-// Consulta de Contexto Situacional (Clima & Ubicación)
+// Consulta de Contexto Situacional (Clima, Ubicación y Riesgos del Microservicio)
 async function loadSituationalContext() {
   try {
     const query = userCoords ? `?lat=${userCoords.lat}&lon=${userCoords.lon}` : '';
@@ -617,6 +617,7 @@ async function loadSituationalContext() {
       const data = await res.json();
       const w = data.weather || {};
       const loc = data.location || {};
+      const hz = data.environmental_hazards || {};
 
       const locElem = document.getElementById('enrich-location');
       if (locElem) {
@@ -631,20 +632,178 @@ async function loadSituationalContext() {
       if (windElem && w.wind_speed_kmh !== undefined) windElem.textContent = `${w.wind_speed_kmh} km/h`;
 
       const pavElem = document.getElementById('enrich-pavement');
-      if (pavElem && w.pavement_risk) pavElem.textContent = w.pavement_risk;
+      if (pavElem) pavElem.textContent = hz.pavement_status || w.pavement_risk || 'SECO';
+
+      const dispElem = document.getElementById('enrich-dispersion');
+      if (dispElem && hz.smoke_dispersion_direction) {
+        dispElem.textContent = hz.smoke_dispersion_direction;
+      }
+
+      const hazElem = document.getElementById('enrich-hazard');
+      if (hazElem && hz.hazard_level) {
+        hazElem.textContent = hz.hazard_level;
+        const hl = String(hz.hazard_level).toUpperCase();
+        hazElem.style.color = hl.includes('CRÍT') || hl.includes('ALTO') ? '#ff285d' : (hl.includes('MOD') ? '#ffb700' : '#00ff9d');
+      }
+
+      const msBadge = document.getElementById('ms-status-badge');
+      if (msBadge) {
+        const isHealthy = data.microservice_status === 'healthy';
+        msBadge.textContent = isHealthy ? 'MS: REMOTO ACTIVO' : 'MS: INTEGRADO ACTIVO';
+        msBadge.style.color = '#00ff9d';
+        msBadge.style.borderColor = 'rgba(0, 255, 157, 0.45)';
+      }
     }
   } catch (err) {
     console.warn('Error cargando contexto situacional:', err);
   }
 }
 
+async function triggerMicroserviceCadDispatch() {
+  playTacticalChirp();
+  const plateInput = document.getElementById('plate-search-input');
+  const currentPlate = (plateInput && plateInput.value.trim()) ? plateInput.value.trim() : 'ABC-1234';
+  showSystemToast(`🚨 Evaluando siniestro en Microservicio REST y despachando CAD-911 (${currentPlate})...`);
+
+  try {
+    const res = await fetch('/api/enrichment/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incident_type: 'colision_critica',
+        title: 'COLISIÓN VEHICULAR CONFIRMADA',
+        subtitle: 'Evaluado por Microservicio de Enriquecimiento & Despacho',
+        plate: currentPlate,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const ms = data.microservice_dossier || {};
+      const envRisk = ms.environmental_risk || {};
+      const sms = data.dispatch_status || {};
+
+      const card = document.getElementById('ms-dossier-card');
+      if (card) {
+        card.style.display = 'flex';
+        const ticketEl = document.getElementById('ms-ticket-id');
+        if (ticketEl) ticketEl.textContent = ms.dispatch_ticket_id || 'CAD-911-MEX';
+        const sevEl = document.getElementById('ms-severity-badge');
+        if (sevEl) sevEl.textContent = ms.severity_level || 'CRÍTICO';
+        const incIdEl = document.getElementById('ms-incident-id');
+        if (incIdEl) incIdEl.textContent = ms.incident_id || data.event_id || '---';
+        const dispStatusEl = document.getElementById('ms-dispatch-status');
+        if (dispStatusEl) dispStatusEl.textContent = ms.dispatch_status || 'DELIVERED';
+        const smokeDirEl = document.getElementById('ms-smoke-dir');
+        if (smokeDirEl) smokeDirEl.textContent = envRisk.smoke_dispersion_direction || 'Noreste (NE)';
+        const smsEl = document.getElementById('ms-sms-status');
+        if (smsEl) smsEl.textContent = sms.sms_sent ? `ENVIADO (${sms.destination || 'Twilio'})` : 'REGISTRADO EN COLA';
+      }
+
+      showSystemToast(`✅ Ticket ${ms.dispatch_ticket_id || 'CAD-911'} generado y guardado en /historial`);
+      loadIncidentsHistory();
+    } else {
+      showSystemToast('⚠️ Error al evaluar despacho en el microservicio.');
+    }
+  } catch (err) {
+    console.error('Error despachando incidente:', err);
+    showSystemToast('❌ Error de red al contactar servicio de despacho.');
+  }
+}
+
 // Carga inicial y actualización de bitácora histórica
+let latestHttpsValidation = null;
+
+async function validateCameraHttpsRoute() {
+  try {
+    const res = await fetch('/api/camera/validate');
+    if (res.ok) {
+      const data = await res.json();
+      latestHttpsValidation = data;
+      const pill = document.getElementById('https-security-pill');
+      const txt = document.getElementById('https-status-text');
+      if (pill && txt) {
+        const isBrowserHttps = window.location.protocol === 'https:' || data.is_https;
+        if (isBrowserHttps) {
+          pill.style.borderColor = 'rgba(0, 255, 157, 0.5)';
+          pill.style.color = '#00ff9d';
+          txt.textContent = 'HTTPS SEGURO';
+          pill.title = 'Ruta HTTPS validada para transmisión segura de cámara (WSS/TLS)';
+        } else if (data.is_localhost) {
+          pill.style.borderColor = 'rgba(0, 240, 255, 0.45)';
+          pill.style.color = '#00f0ff';
+          txt.textContent = 'LOCAL SEGURO';
+          pill.title = 'Contexto local seguro. En red móvil o producción se utiliza HTTPS';
+        } else {
+          pill.style.borderColor = 'rgba(255, 170, 0, 0.7)';
+          pill.style.color = '#ffaa00';
+          txt.textContent = 'IR A HTTPS';
+          pill.title = 'Haz clic para cambiar a la ruta segura HTTPS requerida por la cámara';
+          pill.onclick = () => {
+            if (data.recommended_https_url) {
+              window.location.href = data.recommended_https_url;
+            }
+          };
+        }
+      }
+      return data;
+    }
+  } catch (e) {
+    console.debug('Error validando ruta HTTPS:', e);
+  }
+  return null;
+}
+
+async function loadBacklogStatus() {
+  try {
+    const res = await fetch('/api/backlog/status');
+    if (res.ok) {
+      const st = await res.json();
+      const badge = document.getElementById('supabase-status-badge');
+      if (badge) {
+        const count = (st.backlog_counts && st.backlog_counts.incidents) || 0;
+        if (st.connected) {
+          badge.textContent = `SUPABASE CLOUD (${count})`;
+          badge.style.color = '#00ff9d';
+          badge.style.borderColor = 'rgba(0, 255, 157, 0.4)';
+        } else if (st.configured) {
+          badge.textContent = `SUPABASE SYNC (${count})`;
+          badge.style.color = '#00f0ff';
+        } else {
+          badge.textContent = `BACKLOG (${count})`;
+        }
+      }
+    }
+  } catch (e) {
+    console.debug('No se pudo consultar estatus de Supabase:', e);
+  }
+}
+
+window.cycleIncidentBacklogStatus = async function(incidentId, currentStatus) {
+  const order = ['PENDIENTE', 'EN_ATENCION', 'RESUELTO'];
+  const nextStatus = order[(order.indexOf(currentStatus) + 1) % order.length] || 'EN_ATENCION';
+  try {
+    const res = await fetch(`/api/backlog/incidents/${encodeURIComponent(incidentId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    if (res.ok) {
+      showSystemToast(`Backlog ${incidentId}: ${nextStatus}`);
+      loadIncidentsHistory();
+    }
+  } catch (e) {
+    console.warn('Error actualizando estatus en backlog:', e);
+  }
+};
+
 async function loadIncidentsHistory() {
   try {
     const res = await fetch('/api/incidents');
     if (res.ok) {
       const list = await res.json();
       renderIncidentTimeline(list);
+      loadBacklogStatus();
     }
   } catch (e) {
     console.warn('No se pudo obtener bitácora:', e);
@@ -661,13 +820,22 @@ function renderIncidentTimeline(incidents) {
   let html = '';
   incidents.forEach((item) => {
     const isSmoke = item.type === 'humo_detectado';
+    const incId = item.incident_id || item.id || '';
+    const incStatus = (item.status || 'PENDIENTE').toUpperCase();
+    const statusColor = incStatus === 'RESUELTO' ? '#00ff9d' : (incStatus === 'EN_ATENCION' ? '#00f0ff' : '#ffaa00');
+    const statusBadge = incId
+      ? `<span class="chip-plate-tag" onclick="window.cycleIncidentBacklogStatus('${incId}', '${incStatus}')" title="Clic para cambiar estado en Backlog" style="cursor:pointer; border-color:${statusColor}; color:${statusColor}; margin-left:6px;">${incStatus}</span>`
+      : '';
+    const snapshotHtml = item.snapshot_url
+      ? `<a href="${item.snapshot_url}" target="_blank" rel="noopener" class="chip-plate-tag" style="margin-left:6px; text-decoration:none;">📸 EVIDENCIA</a>`
+      : '';
     const plateHtml = item.plate
       ? `<span class="chip-plate-tag" style="display:inline-flex; align-items:center; gap:3px; margin-left:6px;"><i data-lucide="scan-line"></i> ${item.plate}</span>`
       : '';
     html += `
       <div class="timeline-item ${isSmoke ? 'smoke-item' : ''}">
         <div class="item-main">
-          <span class="item-title">${item.title} ${plateHtml}</span>
+          <span class="item-title">${item.title} ${plateHtml}${statusBadge}${snapshotHtml}</span>
           <span class="item-sub">${item.subtitle}</span>
         </div>
         <span class="item-time">${item.timestamp}</span>
@@ -840,6 +1008,15 @@ async function startDeviceCamera() {
     if (clientVideoStream) {
       clientVideoStream.getTracks().forEach((track) => track.stop());
       clientVideoStream = null;
+    }
+
+    const secCheck = await validateCameraHttpsRoute();
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocal && window.location.protocol !== 'https:' && !(secCheck && secCheck.is_https)) {
+      const targetHttps = (secCheck && secCheck.recommended_https_url) || `https://${window.location.host}${window.location.pathname}`;
+      showSystemToast(`🔒 Redirigiendo a ruta segura HTTPS para validar conexión de cámara: ${targetHttps}`);
+      setTimeout(() => { window.location.href = targetHttps; }, 1200);
+      return;
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1268,6 +1445,14 @@ function setupEventListeners() {
     });
   }
 
+  // Botón de evaluación y despacho CAD-911 del Microservicio
+  const btnDispatchCad = document.getElementById('btn-dispatch-cad');
+  if (btnDispatchCad) {
+    btnDispatchCad.addEventListener('click', () => {
+      triggerMicroserviceCadDispatch();
+    });
+  }
+
   // Consulta manual de Placa o VIN
   const btnSearchPlate = document.getElementById('btn-search-plate');
   const plateInput = document.getElementById('plate-search-input');
@@ -1481,6 +1666,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnCam) btnCam.classList.remove('danger-active');
   if (btnText) btnText.textContent = I18N_DICTIONARY[currentLang].camera_stopped || "ACTIVAR CÁMARA";
 
+  validateCameraHttpsRoute();
+  loadBacklogStatus();
   connectTelemetryWebSocket();
   requestUserLocation();
   setInterval(loadIncidentsHistory, 5000);

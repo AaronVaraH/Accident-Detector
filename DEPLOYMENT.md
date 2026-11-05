@@ -1,111 +1,112 @@
-# 🚀 Guía de Despliegue y Ciclo de Desarrollo Continuo en Render
+# 🚀 Guía de Despliegue en Producción: Servidor Principal + Microservicio en Cuentas Separadas de Render + PostgreSQL/Blob en Vercel
 
-Este documento establece los estándares de desarrollo, pruebas y despliegue continuo (CI/CD) para **Accident-Detector** utilizando **Docker** y **Render**.
-
----
-
-## 🏗️ 1. Arquitectura de Despliegue
-
-La solución está empaquetada como un microservicio autónomo en un contenedor Docker con **Linux Debian (Python 3.10-slim)**:
-- **FastAPI / Uvicorn**: Provee la API REST, streaming MJPEG y WebSockets en tiempo real.
-- **Frontend PWA**: Servido directamente desde la carpeta `pwa/` por FastAPI en la raíz `/` con soporte para instalación offline, manifest y service workers.
-- **Pipeline de IA**: Ejecución optimizada en CPU con soporte para YOLOv8 (nano) y modelos remotos vía Roboflow API.
+Esta guía documenta paso a paso cómo desplegar y conectar **Accident-Detector (TITAN Vision)** en producción utilizando:
+1. **Cuenta 1 de Render (Servidor Principal + PWA + Motor IA):** Ejecuta [`server.py`](server.py), expone el Dashboard táctico en `/` y la vista dedicada de auditoría en `/historial`.
+2. **Cuenta 2 de Render (Capa de Microservicios):** Ejecuta el microservicio REST independiente [`services/incident_enrichment_service`](services/incident_enrichment_service/main.py) para evaluación contextual, cálculo de dispersión de humo y generación de tickets **CAD-911**.
+3. **Vercel Storage (PostgreSQL + Vercel Blob):** Almacena automáticamente el historial forense de incidentes, placas detectadas y fotografías de evidencia.
 
 ---
 
-## 🔄 2. Flujo de Trabajo de Desarrollo (Workflow)
+## 🏗️ Arquitectura de Comunicación en Producción
 
-Render está configurado con **Auto-Deploy** enlazado a la rama `main` de GitHub. El flujo recomendado para trabajar es:
-
-### Paso 1: Desarrollo y Pruebas Locales
-Trabaja con el entorno virtual activo:
-```powershell
-# En Windows PowerShell
-.venv\Scripts\Activate.ps1
-
-# Ejecutar el servidor en local
-python server.py
 ```
-Accede a `http://localhost:8000` para probar los cambios en la PWA y en el backend.
-
-### Paso 2: Validación Previa al Commit
-Antes de subir cambios, verifica que:
-1. Si instalaste nuevas librerías, estén registradas en `requirements.txt`:
-   ```powershell
-   pip freeze > requirements.txt  # o agregarla manualmente
-   ```
-2. Si la librería requiere paquetes nativos de C/C++ o Linux (ej. `libsndfile`, `tesseract`), deben agregarse a `apt-get install` en el `Dockerfile`.
-3. Ningún archivo `.env`, llaves SSL ni pesos (`.pt`, `.onnx`) se encuentren en el staging de Git (`git status`).
-
-### Paso 3: Publicación y Auto-Deploy
-Haz commit y push a la rama `main`:
-```powershell
-git add .
-git commit -m "feat: descripción clara de la mejora"
-git push origin main
+┌─────────────────────────────────────────────────────────────┐
+│ CUENTA 1 DE RENDER (Servidor Principal + PWA)               │
+│ URL: https://accident-detector.onrender.com                 │
+│  ├─ /          -> Dashboard Táctico en Vivo (Cámara + IA)   │
+│  ├─ /historial -> Vista Dedicada de Historial y Expedientes │
+│  └─ Consume vía HTTP (X-API-Key) ───────────────────────────┼───┐
+└───────────────┬─────────────────────────────────────────────┘   │
+                │                                                 ▼
+                │                             ┌──────────────────────────────────────────────┐
+                │                             │ CUENTA 2 DE RENDER (Microservicio REST)      │
+                │                             │ Root Dir: services/incident_enrichment_service│
+                │                             │ URL: https://titan-enrichment-ms.onrender.com│
+                │                             │  ├─ POST /api/v1/incidents/evaluate-and-dispatch
+                │                             │  ├─ GET  /api/v1/incidents/{id}/dossier      │
+                │                             │  └─ GET  /api/v1/environmental-hazards       │
+                │                             └──────────────────────────────────────────────┘
+                ▼
+┌─────────────────────────────────────────────────────────────┐
+│ VERCEL STORAGE (Base de Datos + Almacenamiento de Objetos)  │
+│  ├─ Vercel Postgres (SQLAlchemy ORM crea las 3 tablas solo) │
+│  └─ Vercel Blob (Sube las capturas JPEG de choques y placas)│
+└─────────────────────────────────────────────────────────────┘
 ```
-**Render detectará el push de inmediato, construirá la nueva imagen Docker y pondrá la versión actualizada en línea de forma automática.**
 
 ---
 
-## 🛡️ 3. Reglas de Oro para Desarrollo Enfocado a Render
+## 🛠️ PARTE 1: Desplegar el Microservicio en la Cuenta 2 de Render
 
-### ⚠️ A. Gestión Estricta de Memoria RAM (Límite: 512 MB Free Tier)
-El plan gratuito de Render otorga 512 MB de memoria RAM. Superar este límite provocará un reinicio por **Out of Memory (OOM)**:
-- **Modelos de IA**: Utiliza siempre variantes **Nano** (`yolov8n.pt`) o delega la inferencia pesada a APIs externas (Roboflow Inference).
-- **Procesamiento de Video**: Procesa fotogramas al vuelo; **nunca acumules buffers de imágenes o arrays NumPy en listas globales**.
-- **Liberación de Memoria**: Deja que el recolector de basura de Python limpie las variables temporales tras procesar cada fotograma.
+1. Inicia sesión en tu **segunda cuenta de Render** (o en un nuevo servicio dentro de tu cuenta) y haz clic en **New +** -> **Web Service**.
+2. Conecta el mismo repositorio de GitHub (`Accident-Detector`).
+3. Configura los siguientes campos exactos en el formulario de Render:
+   - **Name:** `titan-enrichment-microservice`
+   - **Branch:** `main`
+   - **Root Directory:** `services/incident_enrichment_service` *(¡Muy importante! Esto le indica a Render que despliegue únicamente la carpeta del microservicio)*.
+   - **Runtime / Environment:** `Docker` (usará el [`services/incident_enrichment_service/Dockerfile`](services/incident_enrichment_service/Dockerfile) que es ultraligero, ~45 MB de RAM, ideal para el **Plan Free**) o `Python 3` con:
+     - **Build Command:** `pip install -r requirements.txt`
+     - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. En la sección **Environment Variables** del Microservicio (Cuenta 2), agrega:
 
-### 🌐 B. Puerto Dinámico (`$PORT`)
-Render asigna un puerto dinámico mediante la variable de entorno `$PORT` (generalmente el puerto `10000`):
-- `server.py` ya lee automáticamente `int(os.environ.get("PORT", 8000))`.
-- Nunca fijes un puerto estático en el código del servidor.
+| Variable | Valor |
+| :--- | :--- |
+| `ENVIRONMENT` | `production` |
+| `SERVICE_API_KEY` | `titan-secret-key-2026` *(o tu clave secreta personalizada)* |
+| `OPENWEATHER_API_KEY` | Tu API Key de OpenWeatherMap *(la misma de tu `.env`)* |
 
-### 🔐 C. Seguridad y Variables de Entorno
-Todos los secretos deben registrarse en el panel de Render (**Environment Tab**), nunca en el código fuente:
-- `ROBOFLOW_API_KEY`: Llave de inferencia de Roboflow.
-- `MODEL_ID_VEHICULOS`: `vehicle-qq0yh/2`
-- `MODEL_ID_FUEGO`: `fire-detection-for-khkt/3`
-- `MODEL_ID_PLACAS`: `vehicle-registration-plates-trudk/2`
-- `DEVICE`: `cpu`
-- `CONFIDENCE_THRESHOLD`: `0.45`
-- `IOU_THRESHOLD`: `0.50`
-
----
-
-## 🐳 4. Prueba Local con Docker (Simulación Idéntica a Render)
-
-Si tienes Docker instalado y deseas validar exactamente lo que correrá Render antes de hacer push:
-
-```powershell
-# 1. Construir la imagen localmente
-docker build -t accident-detector .
-
-# 2. Correr el contenedor pasando las variables de entorno
-docker run -p 8000:8000 --env-file .env accident-detector
-```
-Abre `http://localhost:8000` en tu navegador para confirmar el correcto funcionamiento.
+5. Haz clic en **Create Web Service**.
+6. Una vez desplegado, copia la URL pública que te asignó Render (ejemplo: `https://titan-enrichment-microservice.onrender.com`) y verifica que responda entrando a:
+   - `https://titan-enrichment-microservice.onrender.com/health`
+   - `https://titan-enrichment-microservice.onrender.com/docs`
 
 ---
 
-## ⏱️ 5. Manejo de "Cold Start" y Mantener el Servicio Activo
+## 🔗 PARTE 2: Conectar el Servidor Principal (Cuenta 1 de Render) con el Microservicio y Vercel
 
-En el plan gratuito, Render apaga el servicio tras **15 minutos de inactividad**. La siguiente petición tardará ~40 segundos en levantar el contenedor.
+En tu **Cuenta 1 de Render** (donde ya tienes arriba el proyecto principal), ve a tu servicio -> pestaña **Environment** y asegúrate de tener configuradas estas variables (puedes copiarlas directamente de tu archivo [`.env`](.env)):
 
-**Solución para mantenerlo 24/7 despierto (Opcional & Gratuito):**
-1. Crea una cuenta gratuita en [cron-job.org](https://cron-job.org) o [uptimerobot.com](https://uptimerobot.com).
-2. Configura un monitor tipo **HTTP(s)** apuntando al endpoint de estado:
-   `https://tu-app-render.onrender.com/api/status`
-3. Configura el intervalo cada **10 minutos**.
-4. Con esto, el servidor recibirá un ping continuo y permanecerá siempre despierto sin entrar en modo reposo.
+### 1. Conexión con el Microservicio (Cuenta 2)
+| Variable | Valor |
+| :--- | :--- |
+| `ENRICHMENT_SERVICE_URL` | `https://titan-enrichment-microservice.onrender.com` *(sin `/` al final)* |
+| `ENRICHMENT_SERVICE_API_KEY` | `titan-secret-key-2026` *(debe coincidir exactamente con `SERVICE_API_KEY` de la Cuenta 2)* |
+
+### 2. Conexión con Base de Datos y Blob de Vercel
+| Variable | Valor |
+| :--- | :--- |
+| `POSTGRES_URL_NON_POOLING` | Tu URL `postgres://...` de Vercel Postgres |
+| `DATABASE_URL` | Tu URL `postgres://...` de Vercel Postgres |
+| `BLOB_READ_WRITE_TOKEN` | Tu token `vercel_blob_rw_...` de Vercel Blob |
+
+*(Nota: Al arrancar [`server.py`](server.py), SQLAlchemy ORM ejecuta `Base.metadata.create_all()` automáticamente y crea las tablas `incidents_backlog`, `plates_backlog` y `vehicles_registry` en tu base de datos de Vercel sin necesidad de correr scripts SQL).*
+
+### 3. Variables de IA y Despacho SMS (Twilio / APIs)
+| Variable | Valor |
+| :--- | :--- |
+| `ENVIRONMENT` | `production` |
+| `FORCE_HTTPS` | `true` |
+| `ROBOFLOW_API_KEY` | Tu clave de Roboflow |
+| `OPENWEATHER_API_KEY` | Tu clave de OpenWeatherMap |
+| `MAPS_API_KEY` | Tu clave de Google Maps |
+| `RAPIDAPI_KEY` | Tu clave de RapidAPI (`car-api2`) |
+| `TWILIO_ACCOUNT_SID` | Tu Account SID de Twilio |
+| `TWILIO_AUTH_TOKEN` | Tu Auth Token de Twilio |
+| `TWILIO_FROM_PHONE` | Número remitente de Twilio |
+| `TWILIO_TO_PHONE` | Número destino de emergencias |
 
 ---
 
-## 🩺 6. Solución de Problemas (Troubleshooting)
+## 🖥️ PARTE 3: Validación Visual en el Dashboard (`/`) y en la Vista `/historial`
 
-| Síntoma en Render | Causa Probable | Solución |
-| :--- | :--- | :--- |
-| **Build Error: `No module named cv2`** | Falta alguna biblioteca C de Linux en el sistema. | Verificar que `libgl1` y `libglib2.0-0` estén en `apt-get` en el `Dockerfile`. |
-| **Exit Code 137 / Out of Memory** | La carga de modelos excedió los 512 MB de RAM. | Verificar que `DEVICE=cpu` y que solo se cargue el modelo Nano o Roboflow. |
-| **Web Service Failed to Bind to Port** | El servidor no escuchó en `0.0.0.0` o no usó `$PORT`. | Asegurar que `uvicorn` escuche en `host="0.0.0.0"` y `port=int(os.environ.get("PORT", 8000))`. |
-| **WebSocket Connection Failed** | El cliente PWA intenta conectar a HTTP en lugar de WSS. | `app.js` detecta `wss://` automáticamente cuando corre bajo HTTPS en Render. |
+Ya no verás respuestas JSON estáticas: toda la información del microservicio y de la base de datos se consume y presenta en componentes visuales interactivos:
+
+1. **En el Dashboard Principal (`/`):**
+   - **Panel "CONTEXTO SITUACIONAL (APIs)":** Muestra en tiempo real el estado del microservicio (`MS: REMOTO ACTIVO`), la dirección de **Dispersión de Humo** (`Noreste (NE)`), el **Riesgo Ambiental** (`BAJO / MODERADO / CRÍTICO`), el estado del pavimento y el botón **`EVALUAR & DESPACHAR CAD-911`**, que invoca el microservicio y despliega la tarjeta visual con el folio `CAD-911-MEX-...` y el estado del SMS.
+   - **Botón Superior `HISTORIAL`:** Enlaza directamente a la vista dedicada `/historial`.
+
+2. **En la Vista Dedicada (`/historial`):**
+   - Muestra las tarjetas de métricas globales del backlog (Total Siniestros, Pendientes/En Atención, Resueltos y Placas en Backlog).
+   - Permite filtrar incidentes por estado (`PENDIENTE`, `EN_ATENCION`, `RESUELTO`) y por tipo (`colision_critica`, `fuego_confirmado`, `humo_detectado`), cambiar el estado con un clic y abrir la fotografía de evidencia guardada en **Vercel Blob**.
+   - Incluye el **Inspector de Expediente Situacional del Microservicio REST**, donde al hacer clic en cualquier incidente de la lista (o buscar su ID como `INC-2026-004812`) se visualizan todos los datos cruzados del microservicio (Ticket CAD-911, Cinemática de Impacto, Dispersión de Humo, Clima y Vehículo).
+   - Incluye botones de descarga directa para exportar a **CSV (Excel)** y **JSON**.

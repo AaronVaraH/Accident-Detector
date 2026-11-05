@@ -12,18 +12,19 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
-import supervision as sv
+sv = None
 
 from config import settings
 from src.stream import VideoStream
-from src.inference import VehicleDetector, FireDetector
-from src.kinematics import VehicleKinematicsTracker
-from src.incident_rules import IncidentRuleEngine, IncidentEvent
+VehicleDetector = Any; FireDetector = Any
+VehicleKinematicsTracker = Any
+IncidentRuleEngine = Any; IncidentEvent = Any
 from src.ui_hud import TacticalHUD
 from src.motion import MotionAnalyzer
 from src.i18n import i18n
 from src.plate_detector import license_plate_detector
 from src.enrichment import enrichment_aggregator, vehicle_service
+from src.database import backlog_db
 
 logger = logging.getLogger("PipelineManager")
 
@@ -95,11 +96,15 @@ class PipelineManager:
 
         # Componentes analíticos persistentes (se cargan una sola vez en memoria)
         logger.info("Precargando detectores de IA persistentes en memoria...")
-        self.vehicle_detector = VehicleDetector(
+        self.vehicle_detector: Optional[VehicleDetector] = None
+        self.fire_detector: Optional[FireDetector] = None
+        if False:
+            self.vehicle_detector = VehicleDetector(
             conf_threshold=self.vehicle_conf,
             detect_persons=self.track_persons or True,
         )
-        self.fire_detector = FireDetector(
+        if False:
+            self.fire_detector = FireDetector(
             fire_conf=self.fire_conf,
             smoke_conf=self.smoke_conf,
             enable_focal_lighter=True,
@@ -175,11 +180,26 @@ class PipelineManager:
                 time.sleep(1.0)
 
     def _execute_pipeline(self):
+        import supervision as sv
+        from src.inference import VehicleDetector, FireDetector
+        from src.kinematics import VehicleKinematicsTracker
+        from src.incident_rules import IncidentRuleEngine, IncidentEvent
         is_webcam = str(self.source) in ["0", "1"] or str(self.source).isdigit()
         is_client = (self.source == "client_cam")
         should_detect_persons = self.track_persons or is_webcam or is_client
 
         # Sincronizar configuraciones dinámicas en detectores persistentes
+        if self.vehicle_detector is None:
+            self.vehicle_detector = VehicleDetector(
+                conf_threshold=self.vehicle_conf,
+                detect_persons=self.track_persons or True,
+            )
+        if self.fire_detector is None:
+            self.fire_detector = FireDetector(
+                fire_conf=self.fire_conf,
+                smoke_conf=self.smoke_conf,
+                enable_focal_lighter=True,
+            )
         self.vehicle_detector.conf_threshold = self.vehicle_conf
         self.fire_detector.fire_conf = self.fire_conf
         self.fire_detector.smoke_conf = self.smoke_conf
@@ -382,7 +402,18 @@ class PipelineManager:
                     "vehicle": enriched_payload.get("vehicle"),
                     "enrichment": enriched_payload,
                 }
-                self.incidents_history.insert(0, incident_record)
+                ret_snap, snap_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                snap_bytes = snap_buf.tobytes() if ret_snap else None
+                saved_record = backlog_db.record_incident(
+                    {
+                        **incident_record,
+                        "camera_id": self.camera_id,
+                        "source": str(self.source),
+                        "telemetry": {"motion_energy": motion_energy, "fps": current_fps},
+                    },
+                    frame_jpeg=snap_bytes,
+                )
+                self.incidents_history.insert(0, saved_record)
                 if len(self.incidents_history) > 50:
                     self.incidents_history.pop()
 

@@ -45,6 +45,14 @@
 
     <!-- Acciones y Estado Limpio -->
     <div class="header-actions">
+      <a href="/historial" class="action-btn btn-pill" id="btn-nav-historial" title="Abrir Centro de Historial & Backlog Forense (/historial)" style="text-decoration:none; border-color: rgba(0,240,255,0.45); color: #00f0ff;">
+        <i data-lucide="database"></i>
+        <span>HISTORIAL</span>
+      </a>
+      <button class="header-status-pill https-pill" id="https-security-pill" title="Validar Ruta Segura HTTPS para Cámara">
+        <i data-lucide="lock" id="https-icon-lucide" style="width:14px;height:14px;"></i>
+        <span id="https-status-text">HTTPS</span>
+      </button>
       <div class="header-status-pill" id="stream-status-pill">
         <span class="status-dot"></span>
         <span id="metric-fps">0.0</span> FPS
@@ -81,6 +89,7 @@
           <button class="emergency-dismiss-btn" id="banner-dismiss" title="Reconocer alerta">
             <i data-lucide="x"></i>
           </button>
+
         </div>
 
         <!-- Elemento de Video Principal (MJPEG Stream & Cámara Móvil) -->
@@ -114,13 +123,16 @@
               <i data-lucide="camera" id="camera-icon-lucide"></i>
               <span id="camera-btn-text">ACTIVAR CÁMARA</span>
             </button>
+  
             <button class="control-btn btn-flip" id="btn-flip-camera" title="Cambiar cámara frontal / trasera">
               <i data-lucide="switch-camera"></i>
             </button>
+  
             <button class="control-btn" id="btn-pause-play" title="Pausar / Reanudar Stream">
               <i data-lucide="pause" id="pause-icon-lucide"></i>
               <span id="i18n-pause">PAUSAR</span>
             </button>
+  
             <label class="control-btn btn-upload-video" id="btn-upload-video-lbl" title="Subir video MP4 del juez para análisis en vivo">
               <i data-lucide="file-video"></i>
               <span id="i18n-upload-video">SUBIR VIDEO</span>
@@ -284,12 +296,15 @@
         </div>
       </div>
 
-      <!-- Panel de Enriquecimiento Ambiental & Geográfico -->
+      <!-- Panel de Enriquecimiento Ambiental & Microservicio CAD 911 -->
       <div class="enrichment-panel">
-        <h3 class="panel-heading">
-          <i data-lucide="cloud-sun" class="panel-icon-svg"></i>
-          <span id="i18n-enrich-title">CONTEXTO SITUACIONAL (APIs)</span>
-        </h3>
+        <div class="panel-header-split">
+          <h3 class="panel-heading">
+            <i data-lucide="cloud-sun" class="panel-icon-svg"></i>
+            <span id="i18n-enrich-title">CONTEXTO SITUACIONAL (APIs)</span>
+          </h3>
+          <span class="alpr-model-tag" id="ms-status-badge" title="Estado del Microservicio REST de Enriquecimiento">MS: CONECTADO</span>
+        </div>
         <div class="enrichment-grid">
           <div class="enrich-item">
             <span class="enrich-lbl"><i data-lucide="map-pin"></i> Ubicación:</span>
@@ -306,6 +321,40 @@
           <div class="enrich-item">
             <span class="enrich-lbl"><i data-lucide="gauge"></i> Pavimento:</span>
             <span class="enrich-val" id="enrich-pavement">SECO</span>
+          </div>
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="compass"></i> Dispersión Humo:</span>
+            <span class="enrich-val" id="enrich-dispersion">Noreste (NE)</span>
+          </div>
+          <div class="enrich-item">
+            <span class="enrich-lbl"><i data-lucide="alert-octagon"></i> Riesgo Ambiental:</span>
+            <span class="enrich-val" id="enrich-hazard" style="color:#00ff9d;">BAJO</span>
+          </div>
+        </div>
+
+        <!-- Acciones directas del Microservicio de Despacho CAD 911 -->
+        <div style="display:flex; gap:0.5rem; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top:0.25rem; padding-top:0.55rem; border-top:1px solid rgba(255,255,255,0.06);">
+          <button class="action-btn btn-search" id="btn-dispatch-cad" title="Evaluar incidente en Microservicio REST y Despachar CAD 911 / SMS" style="flex:1; justify-content:center;">
+            <i data-lucide="siren"></i>
+            <span>EVALUAR & DESPACHAR CAD-911</span>
+          </button>
+          <a href="/historial" class="action-btn" style="text-decoration:none; justify-content:center;" title="Ver todos los expedientes y el backlog en /historial">
+            <i data-lucide="external-link"></i>
+            <span>VER /HISTORIAL</span>
+          </a>
+        </div>
+
+        <!-- Tarjeta Visual del Expediente Generado por el Microservicio -->
+        <div class="vehicle-dossier" id="ms-dossier-card" style="display: none; border-color: rgba(0, 255, 136, 0.4);">
+          <div class="dossier-header">
+            <div class="dossier-plate-badge" id="ms-ticket-id" style="font-size:0.85rem; border-color:#00f0ff; color:#00f0ff;">CAD-911</div>
+            <div class="dossier-status" id="ms-severity-badge">CRÍTICO</div>
+          </div>
+          <div class="dossier-grid">
+            <div class="dossier-item"><span class="lbl">ID Expediente:</span> <strong id="ms-incident-id">---</strong></div>
+            <div class="dossier-item"><span class="lbl">Estado Despacho:</span> <strong id="ms-dispatch-status" class="fuel-badge">DELIVERED</strong></div>
+            <div class="dossier-item"><span class="lbl">Dispersión Humo:</span> <strong id="ms-smoke-dir">---</strong></div>
+            <div class="dossier-item"><span class="lbl">SMS Emergencias:</span> <strong id="ms-sms-status">ENVIADO</strong></div>
           </div>
         </div>
       </div>
@@ -337,10 +386,24 @@
             </h3>
             <p class="panel-desc">Historial forense inmutable de choques y conatos con placas asociadas.</p>
           </div>
-          <button class="mini-btn" id="btn-clear-log" title="Limpiar bitácora visual">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span class="alpr-model-tag" id="supabase-status-badge" title="Estado del Backlog en PostgreSQL + Vercel Blob">DB: VERIFICANDO</span>
+            <a href="/historial" class="mini-btn" style="border-color:rgba(0,240,255,0.45); color:#00f0ff; text-decoration:none;" title="Abrir vista dedicada /historial">
+              <i data-lucide="external-link"></i>
+              <span>VER HISTORIAL</span>
+            </a>
+            <a href="/api/backlog/export?format=csv&target=incidents" class="mini-btn" id="btn-export-csv" title="Descargar Backlog en CSV" download>
+              <i data-lucide="download"></i>
+              <span>CSV</span>
+            </a>
+            <a href="/api/backlog/export?format=json" class="mini-btn" id="btn-export-json" title="Descargar Backlog en JSON" download>
+              <i data-lucide="file-json"></i>
+              <span>JSON</span>
+            </a>
+            <button class="mini-btn" id="btn-clear-log" title="Limpiar bitácora visual">
             <i data-lucide="trash-2"></i>
-            <span>LIMPIAR</span>
-          </button>
+            <span>LIMPIAR</span></button></div>
+
         </div>
         <div class="incident-timeline" id="incident-timeline">
           <div class="empty-state" id="i18n-no-incidents">Sin anomalías críticas registradas. Sistema seguro.</div>
@@ -350,6 +413,6 @@
   </main>
 
   <!-- Script Principal de la PWA -->
-  <script src="/static/app.js?v=9" defer></script>
+  <script src="/static/app.js?v=10" defer></script>
 </body>
 </html>

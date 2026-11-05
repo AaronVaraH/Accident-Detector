@@ -10,8 +10,12 @@ import logging
 from typing import Dict, Any, Tuple, Optional
 import requests
 
-from ..config import settings
-from ..models import EnvironmentalRisk
+try:
+    from ..config import settings
+    from ..models import EnvironmentalRisk
+except ImportError:
+    from config import settings
+    from models import EnvironmentalRisk
 
 logger = logging.getLogger("WeatherClient")
 

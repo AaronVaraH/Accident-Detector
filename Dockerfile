@@ -4,7 +4,9 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
-    YOLO_CONFIG_DIR=/tmp/Ultralytics
+    YOLO_CONFIG_DIR=/tmp/Ultralytics \
+    ENVIRONMENT=production \
+    FORCE_HTTPS=true
 
 WORKDIR /app
 
@@ -38,5 +40,9 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-# Comando de arranque del servidor
+# Healthcheck para monitoreo de disponibilidad en producción
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/api/health || exit 1
+
+# Comando de arranque del servidor con soporte para Proxy TLS (Render HTTPS)
 CMD ["python", "server.py"]

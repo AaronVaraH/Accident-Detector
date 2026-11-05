@@ -362,6 +362,11 @@ class VehicleLookupService:
         data["source"] = "Manual Registration"
         data["query_timestamp"] = datetime.now().isoformat()
         self.cache[clean_plate] = data
+        try:
+            from src.database import backlog_db
+            backlog_db.upsert_vehicle(clean_plate, data)
+        except Exception:
+            pass
         return data
 
     def get_all_plates(self) -> List[Dict[str, Any]]:

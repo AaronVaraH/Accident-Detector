@@ -14,14 +14,24 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 
-from .config import settings
-from .models import (
-    IncidentEvaluationRequest,
-    IncidentDossierResponse,
-    EnvironmentalRisk,
-    StandardErrorResponse,
-)
-from .services import weather_client, incident_storage
+try:
+    from .config import settings
+    from .models import (
+        IncidentEvaluationRequest,
+        IncidentDossierResponse,
+        EnvironmentalRisk,
+        StandardErrorResponse,
+    )
+    from .services import weather_client, incident_storage
+except ImportError:
+    from config import settings
+    from models import (
+        IncidentEvaluationRequest,
+        IncidentDossierResponse,
+        EnvironmentalRisk,
+        StandardErrorResponse,
+    )
+    from services import weather_client, incident_storage
 
 # Configuración de logging institucional
 logging.basicConfig(

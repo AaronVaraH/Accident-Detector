@@ -6,12 +6,17 @@ numpy>=1.24.0
 onnxruntime>=1.18.0
 easyocr>=1.7.1
 
-# Configuración y utilidades
+# Configuración, Seguridad SSL y Utilidades
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 requests>=2.31.0
+cryptography>=42.0.0
+
+# ORM y Base de Datos PostgreSQL (Vercel / Supabase)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
 # Servidor Web & Streaming PWA
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 websockets>=12.0
-

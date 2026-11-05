@@ -15,6 +15,10 @@
       "destination": "/pwa/sw.js"
     },
     {
+      "source": "/historial",
+      "destination": "/pwa/historial.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/pwa/$1"
     }

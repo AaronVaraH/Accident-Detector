@@ -20,6 +20,7 @@ import requests
 
 from config import settings
 from src.enrichment import vehicle_service
+from src.database import backlog_db
 
 logger = logging.getLogger("PlateDetector")
 
@@ -265,6 +266,8 @@ class LicensePlateDetector:
             else:
                 self.active_plates_by_vehicle[-1] = record
 
+        crop_bytes = thumb_buf.tobytes() if thumb_ret else None
+        backlog_db.record_plate(record.to_dict(), crop_jpeg=crop_bytes)
         logger.info(f"[PLATE] Placa detectada: {record.plate_text} ({vehicle_data.get('brand')} {vehicle_data.get('model')}) - Conf: {confidence:.2f}")
         return record
 

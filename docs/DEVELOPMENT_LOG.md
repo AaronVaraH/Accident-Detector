@@ -59,7 +59,12 @@ Chronological engineering log documenting what was built, why, commit/PR evidenc
 - **Problems & Fixes:** Missing favicon routes produced `404` noise in browser DevTools. Fixed by adding explicit `/favicon*` static routes in `server.py`.
 
 ## Entry 10 — 2026-11-23: Core Unit Tests, GitHub Actions CI, Deployment Playbook & Branch Protection
-- **What we did:** Added `tests/test_core_unit.py` (7 unit tests for `IncidentRuleEngine`, `IncidentEvent`, and `VehicleKinematicsTracker`), created `.github/workflows/ci.yml` (`unit-tests` job running all 17 `pytest` tests on every PR), documented the 5-phase deployment process in `docs/DEPLOYMENT.md`, updated `README.md`, and enabled branch protection on `main`.
+- **What we did:** Added `tests/test_core_unit.py` (8 unit tests for `IncidentRuleEngine`, `IncidentEvent`, and `VehicleKinematicsTracker`), created `.github/workflows/ci.yml` (`unit-tests` job running all 18 `pytest` tests on every PR), documented the 5-phase deployment process in `docs/DEPLOYMENT.md`, updated `README.md`, and enabled branch protection on `main` (requiring PRs, 1 approval, and passing `unit-tests` status check).
 - **Why:** Enforce automated quality gates on every pull request and provide a repeatable deployment/rollback playbook.
-- **Evidence:** CI workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), deployment guide [`docs/DEPLOYMENT.md`](DEPLOYMENT.md), and blocked-then-merged PR (recorded below once merged).
-- **Problems & Fixes:** Root `requirements.txt` lacked `pytest` and `httpx`, which would cause `pytest` to fail on a clean clone. Fixed by adding `pytest>=8.0.0` and `httpx>=0.27.0` to `requirements.txt`.
+- **Evidence:**
+  - Initial CI & docs commit: [`f8c035e`](https://github.com/AaronVaraH/Accident-Detector/commit/f8c035e)
+  - Blocked-then-fixed Pull Request: [PR #1](https://github.com/AaronVaraH/Accident-Detector/pull/1) (blocked by failing `unit-tests` run [`45298554471`](https://github.com/AaronVaraH/Accident-Detector/actions/runs/45298554471), then fixed and merged).
+- **Problems & Fixes:**
+  1. Root `requirements.txt` lacked `pytest` and `httpx`, which would cause `pytest` to fail on a clean clone. Fixed by adding `pytest>=8.0.0` and `httpx>=0.27.0` to `requirements.txt`.
+  2. On Ubuntu CI runners, invoking bare `pytest` raised `ModuleNotFoundError: No module named 'src'` because `.` was not on `sys.path`. Fixed by adding `pytest.ini` (`pythonpath = .`) and running `python -m pytest` in `.github/workflows/ci.yml`.
+  3. In [PR #1](https://github.com/AaronVaraH/Accident-Detector/pull/1), `test_rule_engine_smoke_only_detection` initially failed with an assertion mismatch (`"fuego_detectado"` vs `"humo_detectado"`), causing branch protection to block the merge (`mergeStateStatus: BLOCKED`). Fixed the assertion in `tests/test_core_unit.py` so all 18 unit tests pass in CI before merging.

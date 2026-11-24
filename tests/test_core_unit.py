@@ -129,5 +129,4 @@ def test_rule_engine_smoke_only_detection():
     assert engine.evaluate(1, [], smoke_only) is None
     event = engine.evaluate(2, [], smoke_only)
     assert event is not None
-    # Deliberate mismatch to verify CI blocks PR on failing test:
-    assert event.incident_type == "fuego_detectado"
+    assert event.incident_type == "humo_detectado"

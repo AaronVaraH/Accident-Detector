@@ -119,3 +119,14 @@ def test_incident_event_to_dict_without_anomaly_or_fire():
     assert data["delta_v"] is None
     assert data["has_fire"] is False
     assert data["has_smoke"] is False
+
+
+def test_rule_engine_smoke_only_detection():
+    """Normal case: sustained smoke without fire or collision triggers smoke incident."""
+    engine = IncidentRuleEngine(cooldown_seconds=0.0, fire_persistence_frames=3, smoke_persistence_frames=2)
+    smoke_only = _make_fire_detections([0])
+
+    assert engine.evaluate(1, [], smoke_only) is None
+    event = engine.evaluate(2, [], smoke_only)
+    assert event is not None
+    assert event.incident_type == "humo_detectado"

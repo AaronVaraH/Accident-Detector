@@ -17,48 +17,60 @@ Sistema de visión computacional y análisis cinemático para la detección temp
 
 ---
 
-## 🛠️ Instalación y Uso
+## 🛠️ Instalación y Uso (Clean Clone)
 
-### 1. Activar entorno virtual
-En Windows PowerShell:
-```powershell
+### 1. Clonar e instalar dependencias
+```bash
+git clone https://github.com/AaronVaraH/Accident-Detector.git
+cd Accident-Detector
+python -m venv .venv
+# Windows PowerShell:
 .venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 2. Generar video sintético de prueba
+### 2. Configurar variables de entorno
+Copia `.env.example` a `.env` y completa tus claves locales (nunca subas `.env` al repositorio):
 ```powershell
-python tests/generate_test_video.py
+Copy-Item .env.example .env
 ```
 
-### 3. Ejecutar el monitor principal
-- **Con video de prueba:**
+### 3. Ejecutar el proyecto
+- **Iniciar Servidor Web & Aplicación PWA (Recomendado):**
   ```powershell
-  python main.py --source tests/video_samples/sample_traffic.mp4
-  ```
-
-- **Con cámara web:**
-  ```powershell
-  python main.py --source 0
-  ```
-
-- **Iniciar como Servidor Web & Aplicación PWA (Móvil, Tablet y Escritorio):**
-  ```powershell
-  python main.py --web
-  # O alternativamente:
   python server.py
+  # O alternativamente:
+  python main.py --web
   ```
-  Accede desde cualquier navegador o teléfono en tu red local en: `http://localhost:8000` (o la IP local de tu PC) e instálala con el botón **"INSTALAR PWA"**.
+  Accede desde cualquier navegador en: `http://localhost:8000` (o la IP local de tu PC) e instálala con el botón **"INSTALAR PWA"**.
 
 - **Iniciar Microservicio REST de Enriquecimiento y Despacho:**
   ```powershell
   python -m uvicorn services.incident_enrichment_service.main:app --port 8001 --reload
   ```
-  Documentación de endpoints y pruebas: 👉 **[services/incident_enrichment_service/README.md](services/incident_enrichment_service/README.md)**
+  Documentación de endpoints: 👉 **[services/incident_enrichment_service/README.md](services/incident_enrichment_service/README.md)**
 
-- **Guardando salida anotada:**
+- **Ejecutar pipeline CLI con video de prueba o cámara web:**
   ```powershell
-  python main.py --source tests/video_samples/sample_traffic.mp4 --output tests/video_samples/output_annotated.mp4
+  python main.py --source tests/video_samples/sample_traffic.mp4
+  # Con cámara web:
+  python main.py --source 0
   ```
+
+---
+
+## 🧪 Pruebas Automatizadas (Unit Tests & CI)
+
+El proyecto cuenta con **17 pruebas unitarias** (`pytest`) que cubren casos normales, de borde (*edge cases*) y entradas inválidas tanto para el motor de reglas/cinemática (`tests/test_core_unit.py`) como para el microservicio REST (`services/incident_enrichment_service/tests/test_microservice.py`).
+
+Ejecutar toda la suite desde un clon limpio:
+```bash
+pytest tests/test_core_unit.py services/incident_enrichment_service/tests/test_microservice.py -v
+```
+
+Las pruebas se ejecutan automáticamente en **GitHub Actions** (`.github/workflows/ci.yml`) en cada `pull_request` y `push` hacia `main`. La rama `main` está protegida y requiere que el check `unit-tests` pase antes de hacer merge.
 
 ---
 
@@ -79,10 +91,11 @@ La PWA incluye:
 
 ---
 
-## ☁️ Despliegue en la Nube (Render CI/CD)
+## ☁️ Despliegue en la Nube (Render CI/CD) y Documentación
 El proyecto cuenta con despliegue automatizado en la nube mediante **Docker** y **Render**:
 - Servidor web FastAPI, streaming en vivo y PWA empaquetados en un solo contenedor optimizado.
-- Auto-deploy al hacer `git push origin main`.
-- Para consultar estándares de desarrollo, límites de memoria RAM (512 MB Free), configuración de variables de entorno y prevención de cold starts, consulta la guía completa:
-  👉 **[Guía de Despliegue y Ciclo de Desarrollo (DEPLOYMENT.md)](DEPLOYMENT.md)**
+- Auto-deploy al hacer `git push origin main` (protegido por Pull Requests y CI).
+- **Proceso formal de despliegue (Before, Deploy, Verify, Roll back, Record):** 👉 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+- **Guía técnica detallada de Render + Vercel:** 👉 **[DEPLOYMENT.md](DEPLOYMENT.md)**
+- **Bitácora de desarrollo (Development Log):** 👉 **[docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md)**
 

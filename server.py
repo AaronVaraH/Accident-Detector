@@ -113,6 +113,7 @@ app.add_middleware(HTTPSAndSecurityHeadersMiddleware)
 
 PWA_DIR = Path(__file__).resolve().parent / "pwa"
 PWA_DIR.mkdir(parents=True, exist_ok=True)
+PUBLIC_DIR = Path(__file__).resolve().parent / "public"
 
 
 class ControlPayload(BaseModel):
@@ -769,7 +770,19 @@ def get_service_worker():
     )
 
 
+@app.get("/favicon.ico")
+def get_favicon():
+    fav_file = PWA_DIR / "favicon" / "favicon.ico"
+    if not fav_file.exists():
+        fav_file = PUBLIC_DIR / "favicon" / "favicon.ico"
+    if fav_file.exists():
+        return FileResponse(fav_file, media_type="image/x-icon")
+    return Response(status_code=404)
+
+
 # Servir assets estáticos y la aplicación principal
+if PUBLIC_DIR.exists():
+    app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
 app.mount("/static", StaticFiles(directory=str(PWA_DIR)), name="static")
 
 

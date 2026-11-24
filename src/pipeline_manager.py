@@ -449,17 +449,18 @@ class PipelineManager:
                     else:
                         persons_count += 1
 
-                    speed = kinematics_tracker.get_speed(tracker_id)
+                    speed = 0.0 if is_person else kinematics_tracker.get_speed(tracker_id)
                     class_name = i18n.get_class_name(raw_cls)
                     if is_person:
                         box_color = (130, 230, 0)
+                        label_text = f"{class_name}"
                     else:
                         box_color = (0, 165, 255) if speed > 50.0 else (0, 220, 255)
+                        label_text = f"{class_name} | {speed:.1f} km/h"
 
                     plate_record = active_plates_dict.get(tid)
                     plate_str = plate_record.get("plate") if plate_record else None
 
-                    label_text = f"#{tracker_id} {class_name} | {speed:.1f} km/h"
                     annotated_frame = self.hud.render_tactical_box(
                         frame=annotated_frame,
                         box=box,

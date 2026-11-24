@@ -3,308 +3,247 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>TITAN // Historial Forense & Expedientes Microservicio (/historial)</title>
+  <title>TITAN VISION // Historial Forense</title>
   <meta name="theme-color" content="#070a11">
   <link rel="manifest" href="/manifest.json">
-  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <script src="/static/lucide.min.js" defer></script>
-  <link rel="stylesheet" href="/static/style.css?v=9">
-  <style>
-    .history-container {
-      position: relative;
-      z-index: 10;
-      width: 100%;
-      max-width: 1580px;
-      margin: 0 auto;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1.15rem;
-    }
-    .history-stats-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 0.85rem;
-    }
-    .history-grid {
-      display: grid;
-      grid-template-columns: 1.45fr 1fr;
-      gap: 1.15rem;
-      align-items: start;
-    }
-    @media (max-width: 1024px) {
-      .history-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    .filter-toolbar {
-      display: flex;
-      gap: 0.65rem;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      padding: 0.85rem 1rem;
-    }
-    .filter-group {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .incidents-table-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-      max-height: 680px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-    .history-card {
-      background: rgba(11, 18, 33, 0.86);
-      border: 1px solid var(--border-subtle);
-      border-left: 4px solid var(--alert-red);
-      border-radius: 8px;
-      padding: 0.9rem 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }
-    .history-card:hover {
-      border-color: var(--cyan-primary);
-      background: rgba(0, 240, 255, 0.06);
-      transform: translateY(-1px);
-    }
-    .history-card.status-resuelto {
-      border-left-color: var(--emerald-live);
-    }
-    .history-card.status-en_atencion {
-      border-left-color: var(--cyan-primary);
-    }
-    .history-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-    .history-card-id {
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
-      color: var(--cyan-primary);
-      font-weight: 700;
-    }
-    .history-card-title {
-      font-family: var(--font-display);
-      font-size: 0.92rem;
-      font-weight: 700;
-      color: #fff;
-    }
-    .history-card-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-    .evidence-thumb {
-      width: 100%;
-      max-height: 220px;
-      object-fit: cover;
-      border-radius: 6px;
-      border: 1px solid rgba(0, 240, 255, 0.25);
-      margin-top: 0.4rem;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/style.css?v=16">
 </head>
-<body class="tactical-body">
+<body class="tactical-body" data-initial-view="historial" data-active-view="historial">
   <div class="background-grid"></div>
   <div class="scanlines-overlay"></div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-  <!-- Header Táctico -->
-  <header class="tactical-header">
-    <div class="header-brand">
-      <div class="radar-badge">
-        <span class="radar-ping"></span>
-        <i data-lucide="database" class="brand-icon"></i>
-      </div>
-      <div class="brand-text">
-        <h1 class="brand-title">TITAN <span class="highlight">HISTORIAL & BACKLOG</span></h1>
-        <p class="brand-subtitle">AUDITORÍA FORENSE POSTGRESQL + VERCEL BLOB & MICROSERVICIO CAD-911</p>
-      </div>
-    </div>
-
-    <div class="header-actions">
-      <span class="header-status-pill" id="hist-db-pill">
-        <span class="status-dot"></span>
-        <span id="hist-db-status-txt">POSTGRESQL + BLOB</span>
-      </span>
-      <a href="/" class="action-btn" style="text-decoration:none; border-color:var(--cyan-primary); color:var(--cyan-primary);">
-        <i data-lucide="video"></i>
-        <span>VOLVER AL MONITOR EN VIVO</span>
-      </a>
-    </div>
-  </header>
-
-  <main class="history-container">
-    <!-- Métricas Globales del Backlog -->
-    <section class="history-stats-row">
-      <div class="metric-card metric-incidents">
-        <div class="card-icon"><i data-lucide="shield-alert"></i></div>
-        <div class="card-info">
-          <div class="card-title">TOTAL SINIESTROS</div>
-          <div class="card-value" id="stat-total-incidents">0</div>
+  <div class="app-shell" id="app-shell">
+    <!-- ==================== SIDEBAR LATERAL ==================== -->
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Navegación principal y calibración">
+      <div class="sidebar-brand-box">
+        <div class="radar-badge">
+          <img src="/static/Logo.png" alt="Titan Vision Logo" class="brand-logo-img">
         </div>
-      </div>
-      <div class="metric-card metric-fire">
-        <div class="card-icon"><i data-lucide="clock"></i></div>
-        <div class="card-info">
-          <div class="card-title">PENDIENTES / EN ATENCIÓN</div>
-          <div class="card-value" id="stat-pending-incidents">0</div>
+        <div class="brand-text">
+          <h1 class="brand-title">TITAN <span class="highlight">VISION</span></h1>
         </div>
-      </div>
-      <div class="metric-card metric-persons">
-        <div class="card-icon"><i data-lucide="check-circle-2"></i></div>
-        <div class="card-info">
-          <div class="card-title">RESUELTOS</div>
-          <div class="card-value" id="stat-resolved-incidents">0</div>
-        </div>
-      </div>
-      <div class="metric-card metric-plates">
-        <div class="card-icon"><i data-lucide="scan-line"></i></div>
-        <div class="card-info">
-          <div class="card-title">PLACAS EN BACKLOG</div>
-          <div class="card-value" id="stat-total-plates">0</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Barra de Filtros, Sincronización y Exportación -->
-    <section class="filter-toolbar">
-      <div class="filter-group">
-        <select id="filter-status" class="control-select">
-          <option value="">TODOS LOS ESTADOS</option>
-          <option value="PENDIENTE">PENDIENTE</option>
-          <option value="EN_ATENCION">EN ATENCIÓN</option>
-          <option value="RESUELTO">RESUELTO</option>
-        </select>
-        <select id="filter-type" class="control-select">
-          <option value="">TODOS LOS TIPOS</option>
-          <option value="colision_critica">COLISIÓN CRÍTICA</option>
-          <option value="fuego_confirmado">FUEGO CONFIRMADO</option>
-          <option value="humo_detectado">HUMO DETECTADO</option>
-        </select>
-        <button class="action-btn" id="btn-sync-cloud" title="Sincronizar con PostgreSQL en la nube">
-          <i data-lucide="refresh-cw"></i>
-          <span>SINCRONIZAR NUBE</span>
-        </button>
-        <button class="action-btn btn-search" id="btn-simulate-cad" title="Generar y despachar nuevo expediente en el Microservicio CAD-911">
-          <i data-lucide="siren"></i>
-          <span>NUEVO DESPACHO CAD-911</span>
+        <button class="sidebar-close-btn" id="btn-close-sidebar" aria-label="Cerrar menú">
+          <i data-lucide="x"></i>
         </button>
       </div>
 
-      <div class="filter-group">
-        <a href="/api/backlog/export?format=csv&target=incidents" class="action-btn" style="text-decoration:none;" download>
-          <i data-lucide="download"></i>
-          <span>EXPORTAR SINIESTROS (CSV)</span>
+      <nav class="sidebar-nav" aria-label="Secciones del sistema">
+        <a href="/#home" class="sidebar-nav-item" style="text-decoration:none;">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Home</span>
         </a>
-        <a href="/api/backlog/export?format=csv&target=plates" class="action-btn" style="text-decoration:none;" download>
-          <i data-lucide="credit-card"></i>
-          <span>EXPORTAR PLACAS (CSV)</span>
+        <a href="/#enriquecimiento" class="sidebar-nav-item" style="text-decoration:none;">
+          <i data-lucide="compass"></i>
+          <span>Enriquecimiento</span>
         </a>
-        <a href="/api/backlog/export?format=json" class="action-btn" style="text-decoration:none;" download>
-          <i data-lucide="file-json"></i>
-          <span>JSON COMPLETO</span>
+        <a href="/historial" class="sidebar-nav-item active" style="text-decoration:none;">
+          <i data-lucide="history"></i>
+          <span>Historial</span>
+          <span class="nav-badge" id="nav-incidents-badge">0</span>
         </a>
-      </div>
-    </section>
+      </nav>
 
-    <!-- Cuerpo Principal: Lista de Siniestros (Izquierda) + Expediente Detallado del Microservicio y Placas (Derecha) -->
-    <div class="history-grid">
-      <!-- Columna Izquierda: Registro de Siniestros en Base de Datos -->
-      <div class="blackbox-panel">
-        <div class="panel-header-split">
-          <div>
-            <h3 class="panel-heading">
-              <i data-lucide="clipboard-list" class="panel-icon-svg"></i>
-              <span>BITÁCORA FORENSE DE SINIESTROS (BACKLOG)</span>
-            </h3>
-            <p class="panel-desc">Haz clic en cualquier incidente para inspeccionar su expediente situacional del Microservicio y cambiar su estado.</p>
+      <div class="sidebar-spacer"></div>
+
+      <section class="sidebar-sensitivity-card" aria-labelledby="i18n-ctrl-title">
+        <h3 class="panel-heading">
+          <i data-lucide="sliders" class="panel-icon-svg"></i>
+          <span id="i18n-ctrl-title">CONFIGURACIÓN & SENSIBILIDAD</span>
+        </h3>
+
+        <div class="sliders-group">
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <label for="slider-vehicle-conf">Sensibilidad de Vehículos:</label>
+              <span class="slider-val" id="vehicle-conf-val">0.28</span>
+            </div>
+            <input type="range" min="0.10" max="0.80" step="0.02" value="0.28" id="slider-vehicle-conf" class="tactical-slider">
+          </div>
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <label for="slider-fire-conf">Sensibilidad de Fuego:</label>
+              <span class="slider-val" id="fire-conf-val">0.32 (Calibrado)</span>
+            </div>
+            <input type="range" min="0.10" max="0.80" step="0.02" value="0.32" id="slider-fire-conf" class="tactical-slider">
+          </div>
+          <div class="slider-row">
+            <div class="slider-label-row">
+              <label for="slider-smoke-conf">Sensibilidad de Humo:</label>
+              <span class="slider-val" id="smoke-conf-val">0.14 (Alta)</span>
+            </div>
+            <input type="range" min="0.05" max="0.60" step="0.01" value="0.14" id="slider-smoke-conf" class="tactical-slider">
           </div>
         </div>
-        <div class="incidents-table-wrap" id="history-incidents-list">
-          <div class="empty-state">Cargando registros desde la base de datos...</div>
-        </div>
-      </div>
+      </section>
+    </aside>
 
-      <!-- Columna Derecha: Inspector de Expediente del Microservicio + Historial de Placas -->
-      <div style="display:flex; flex-direction:column; gap:1.15rem;">
-        <!-- Inspector Visual de Expediente Situacional (Microservicio REST) -->
-        <div class="plates-panel">
-          <div class="panel-header-split">
-            <h3 class="panel-heading">
-              <i data-lucide="shield-check" class="panel-icon-svg"></i>
-              <span>EXPEDIENTE SITUACIONAL (MICROSERVICIO REST)</span>
-            </h3>
-            <span class="alpr-model-tag" id="dossier-ticket-tag">SELECCIONA UN REGISTRO</span>
-          </div>
-
-          <!-- Buscador por ID de Expediente (ej. INC-2026-004812) -->
-          <div class="plate-search-box">
-            <div class="search-input-wrapper">
-              <i data-lucide="search" class="search-icon-svg"></i>
-              <input type="text" id="dossier-id-input" placeholder="ID de Incidente (ej: INC-2026-004812)" class="tactical-input" value="INC-2026-004812">
-            </div>
-            <button class="action-btn btn-search" id="btn-fetch-dossier">CONSULTAR DOSSIER</button>
-          </div>
-
-          <div class="vehicle-dossier" id="detailed-dossier-view" style="display:flex;">
-            <div class="dossier-header">
-              <div class="dossier-plate-badge" id="det-inc-id" style="font-size:0.9rem;">INC-2026-004812</div>
-              <div class="dossier-status" id="det-inc-severity">ALTO</div>
-            </div>
-            <div class="dossier-grid">
-              <div class="dossier-item"><span class="lbl">Ticket Despacho CAD:</span> <strong id="det-cad-ticket" class="fuel-badge">CAD-911-MEX-88192</strong></div>
-              <div class="dossier-item"><span class="lbl">Estado Operativo:</span> <strong id="det-status">EN_ATENCION_MEDICA</strong></div>
-              <div class="dossier-item"><span class="lbl">Cámara / Sensor:</span> <strong id="det-camera">CAM-CDMX-PERIFERICO-04</strong></div>
-              <div class="dossier-item"><span class="lbl">Placa / Vehículo:</span> <strong id="det-vehicle">ABC-1234 (Nissan Versa)</strong></div>
-              <div class="dossier-item"><span class="lbl">Cinemática Impacto:</span> <strong id="det-kinematics">78.5 km/h → 0.0 km/h (0.38s)</strong></div>
-              <div class="dossier-item"><span class="lbl">Clima & Viento:</span> <strong id="det-weather">17.5°C | 22.4 km/h</strong></div>
-              <div class="dossier-item"><span class="lbl">Dispersión Humo:</span> <strong id="det-smoke">Noreste (NE)</strong></div>
-              <div class="dossier-item"><span class="lbl">Estado Pavimento:</span> <strong id="det-pavement">Pavimento Mojado</strong></div>
-            </div>
-            <div id="det-snapshot-container" style="display:none;">
-              <img id="det-snapshot-img" class="evidence-thumb" src="" alt="Evidencia Fotográfica Vercel Blob">
-            </div>
-          </div>
+    <!-- ==================== ÁREA DE TRABAJO DERECHA ==================== -->
+    <div class="app-workspace">
+      <header class="app-navbar">
+        <div class="navbar-left">
+          <button type="button" class="navbar-sidebar-trigger" id="btn-toggle-sidebar" title="Mostrar / Ocultar Sidebar" aria-label="Mostrar u ocultar menú lateral">
+            <i data-lucide="panel-left"></i>
+          </button>
         </div>
 
-        <!-- Historial de Placas Detectadas (ALPR Backlog) -->
-        <div class="plates-panel">
-          <div class="panel-header-split">
-            <h3 class="panel-heading">
-              <i data-lucide="scan-line" class="panel-icon-svg"></i>
-              <span>HISTORIAL DE PLACAS DETECTADAS (ALPR)</span>
-            </h3>
-            <span class="alpr-model-tag" id="hist-plates-badge">0 PLACAS</span>
-          </div>
-          <div class="recent-plates-feed" id="history-plates-list" style="max-height:260px;">
-            <div class="empty-state">Sin placas registradas en el backlog.</div>
-          </div>
+        <div class="navbar-right">
+          <span class="header-status-pill" id="hist-db-pill">
+            <span class="status-dot"></span>
+            <span id="hist-db-status-txt">BASE DE DATOS ACTIVA</span>
+          </span>
         </div>
-      </div>
+      </header>
+
+      <main class="app-main">
+        <section class="view-section active" id="view-historial">
+          <div class="history-view-layout">
+            <!-- Barra de Filtros y Exportación Unificada -->
+            <div class="filter-toolbar">
+              <div class="filter-group">
+                <select id="filter-status" class="control-select" aria-label="Filtrar por estado">
+                  <option value="">TODOS LOS ESTADOS</option>
+                  <option value="PENDIENTE">PENDIENTE</option>
+                  <option value="EN_ATENCION">EN ATENCIÓN</option>
+                  <option value="RESUELTO">RESUELTO</option>
+                </select>
+                <select id="filter-type" class="control-select" aria-label="Filtrar por tipo de incidente">
+                  <option value="">TODOS LOS TIPOS</option>
+                  <option value="colision_critica">COLISIÓN CRÍTICA</option>
+                  <option value="fuego_confirmado">FUEGO CONFIRMADO</option>
+                  <option value="humo_detectado">HUMO DETECTADO</option>
+                </select>
+                <button type="button" class="action-btn" id="btn-sync-cloud" title="Sincronizar con PostgreSQL en la nube">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>ACTUALIZAR</span>
+                </button>
+              </div>
+
+              <div class="filter-group">
+                <span class="history-summary-chip">
+                  Total: <strong id="stat-total-incidents">0</strong> |
+                  Pendientes: <strong id="stat-pending-incidents">0</strong> |
+                  Resueltos: <strong id="stat-resolved-incidents">0</strong> |
+                  Placas: <strong id="stat-total-plates">0</strong>
+                </span>
+                <a href="/api/backlog/export?format=csv&target=incidents" class="action-btn" style="text-decoration:none;" download title="Exportar incidentes en CSV">
+                  <i data-lucide="download"></i>
+                  <span>CSV</span>
+                </a>
+                <a href="/api/backlog/export?format=json" class="action-btn" style="text-decoration:none;" download title="Exportar backlog en JSON">
+                  <i data-lucide="file-json"></i>
+                  <span>JSON</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="history-grid">
+              <!-- Columna Izquierda: Lista de Siniestros -->
+              <div class="blackbox-panel">
+                <div class="panel-header-split">
+                  <div>
+                    <h3 class="panel-heading">
+                      <i data-lucide="clipboard-list" class="panel-icon-svg"></i>
+                      <span>BITÁCORA FORENSE DE SINIESTROS (BACKLOG)</span>
+                    </h3>
+                    <p class="panel-desc">Selecciona cualquier incidente para inspeccionar su expediente situacional y gestionar su estado.</p>
+                  </div>
+                </div>
+                <div class="incidents-table-wrap" id="history-incidents-list">
+                  <div class="empty-state">Cargando registros desde la base de datos...</div>
+                </div>
+              </div>
+
+              <!-- Columna Derecha: Inspector de Expediente + Placas Detectadas -->
+              <div style="display:flex; flex-direction:column; gap:1rem;">
+                <div class="plates-panel">
+                  <div class="panel-header-split">
+                    <h3 class="panel-heading">
+                      <i data-lucide="file-check-2" class="panel-icon-svg"></i>
+                      <span>INSPECTOR DE EXPEDIENTE FORENSE</span>
+                    </h3>
+                    <span class="alpr-model-tag" id="dossier-ticket-tag">SIN SELECCIÓN</span>
+                  </div>
+
+                  <div class="plate-search-box">
+                    <div class="search-input-wrapper">
+                      <i data-lucide="search" class="search-icon-svg"></i>
+                      <input type="text" id="dossier-id-input" placeholder="ID de Incidente (ej: INC-...)" class="tactical-input">
+                    </div>
+                    <button type="button" class="action-btn btn-search" id="btn-fetch-dossier">
+                      <i data-lucide="search"></i>
+                      <span>ABRIR</span>
+                    </button>
+                  </div>
+
+                  <div class="empty-state" id="dossier-empty-prompt">
+                    Selecciona un incidente de la bitácora para inspeccionar sus detalles.
+                  </div>
+
+                  <div class="vehicle-dossier" id="detailed-dossier-view" style="display:none;">
+                    <div class="dossier-header">
+                      <div class="dossier-plate-badge" id="det-inc-id">---</div>
+                      <div class="dossier-status" id="det-inc-severity">---</div>
+                    </div>
+                    <div class="dossier-grid">
+                      <div class="dossier-item"><span class="lbl">Ticket Despacho CAD:</span> <strong id="det-cad-ticket" class="fuel-badge">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Estado Operativo:</span> <strong id="det-status">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Cámara / Sensor:</span> <strong id="det-camera">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Placa / Vehículo:</span> <strong id="det-vehicle">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Cinemática Impacto:</span> <strong id="det-kinematics">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Clima & Viento:</span> <strong id="det-weather">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Dispersión Humo:</span> <strong id="det-smoke">---</strong></div>
+                      <div class="dossier-item"><span class="lbl">Estado Pavimento:</span> <strong id="det-pavement">---</strong></div>
+                    </div>
+                    <div id="det-snapshot-container" style="display:none;">
+                      <img id="det-snapshot-img" class="evidence-thumb" src="" alt="Evidencia Fotográfica">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="plates-panel">
+                  <div class="panel-header-split">
+                    <h3 class="panel-heading">
+                      <i data-lucide="scan-line" class="panel-icon-svg"></i>
+                      <span>PLACAS REGISTRADAS EN BACKLOG</span>
+                    </h3>
+                    <span class="alpr-model-tag" id="hist-plates-badge">0 PLACAS</span>
+                  </div>
+                  <div class="recent-plates-feed" id="history-plates-list" style="max-height:220px;">
+                    <div class="empty-state">Sin placas registradas en el backlog.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <div class="footer-controls-left">
+          <a href="/#home" class="control-btn" style="text-decoration:none;">
+            <i data-lucide="video"></i>
+            <span>MONITOR DE CÁMARA</span>
+          </a>
+        </div>
+        <div class="footer-right">
+          <span class="footer-item">
+            <span class="status-dot"></span>
+            <span>PERSISTENCIA: <strong>POSTGRESQL + BLOB</strong></span>
+          </span>
+        </div>
+      </footer>
     </div>
-  </main>
+  </div>
 
   <script>
     async function loadFullBacklog(syncCloud = false) {
@@ -323,22 +262,25 @@
         const incidents = data.incidents || [];
         const plates = data.plates || [];
 
-        // Actualizar estado DB en el header
         const dbTxt = document.getElementById('hist-db-status-txt');
         if (dbTxt) {
           dbTxt.textContent = db.connected
-            ? `POSTGRES + BLOB ACTIVO (${incidents.length})`
-            : `MODO ESPEJO ACTIVO (${incidents.length})`;
+            ? `POSTGRES + BLOB (${incidents.length})`
+            : `BACKLOG ACTIVO (${incidents.length})`;
         }
 
-        // Estadísticas
+        const navBadge = document.getElementById('nav-incidents-badge');
+        if (navBadge) navBadge.textContent = incidents.length;
+
         document.getElementById('stat-total-incidents').textContent = incidents.length;
         const pendingCount = incidents.filter(i => (i.status || '').toUpperCase() !== 'RESUELTO').length;
         const resolvedCount = incidents.filter(i => (i.status || '').toUpperCase() === 'RESUELTO').length;
         document.getElementById('stat-pending-incidents').textContent = pendingCount;
         document.getElementById('stat-resolved-incidents').textContent = resolvedCount;
-        document.getElementById('stat-total-plates').textContent = plates.length;
-        document.getElementById('hist-plates-badge').textContent = `${plates.length} PLACAS`;
+        const totalPlatesEl = document.getElementById('stat-total-plates');
+        if (totalPlatesEl) totalPlatesEl.textContent = plates.length;
+        const platesBadgeEl = document.getElementById('hist-plates-badge');
+        if (platesBadgeEl) platesBadgeEl.textContent = `${plates.length} PLACAS`;
 
         renderHistoryIncidents(incidents);
         renderHistoryPlates(plates);
@@ -362,9 +304,9 @@
         const statusColor = status === 'RESUELTO' ? '#00ff88' : (status === 'EN_ATENCION' ? '#00f0ff' : '#ffb700');
         const veh = inc.vehicle_data || inc.vehicle || {};
         const vehDesc = veh.brand ? `${veh.brand} ${veh.model || ''}` : '';
-        const plateBadge = inc.plate ? `<span class="chip-plate-tag">🚘 ${inc.plate} ${vehDesc}</span>` : '';
-        const ticketBadge = inc.dispatch_ticket_id ? `<span class="chip-plate-tag" style="border-color:#00ff88;color:#00ff88;">🎫 ${inc.dispatch_ticket_id}</span>` : '';
-        const snapBadge = inc.snapshot_url ? `<a href="${inc.snapshot_url}" target="_blank" onclick="event.stopPropagation();" class="chip-plate-tag" style="text-decoration:none;">📸 EVIDENCIA BLOB</a>` : '';
+        const plateBadge = inc.plate ? `<span class="chip-plate-tag"><i data-lucide="scan-line"></i> ${inc.plate} ${vehDesc}</span>` : '';
+        const ticketBadge = inc.dispatch_ticket_id ? `<span class="chip-plate-tag" style="border-color:#00ff88;color:#00ff88;"><i data-lucide="file-check-2"></i> ${inc.dispatch_ticket_id}</span>` : '';
+        const snapBadge = inc.snapshot_url ? `<a href="${inc.snapshot_url}" target="_blank" onclick="event.stopPropagation();" class="chip-plate-tag" style="text-decoration:none;"><i data-lucide="image"></i> EVIDENCIA</a>` : '';
 
         html += `
           <div class="history-card ${statusClass}" onclick="inspectIncidentDossier('${incId}')">
@@ -372,16 +314,16 @@
               <span class="history-card-id">${incId}</span>
               <div style="display:flex; gap:6px; align-items:center;">
                 <span class="chip-plate-tag" onclick="event.stopPropagation(); cycleStatus('${incId}', '${status}')" style="cursor:pointer; border-color:${statusColor}; color:${statusColor};" title="Clic para cambiar estado">
-                  ${status} ↻
+                  ${status}
                 </span>
-                <span class="item-time">${inc.created_at ? inc.created_at.replace('T', ' ').slice(0, 19) : inc.timestamp}</span>
+                <span class="item-time">${inc.created_at ? inc.created_at.replace('T', ' ').slice(0, 19) : (inc.timestamp || '')}</span>
               </div>
             </div>
             <div class="history-card-title">${inc.title || 'SINIESTRO VIAL'}</div>
             <div class="item-sub">${inc.subtitle || ''}</div>
             <div class="history-card-meta">
-              <span>📹 ${inc.camera_id || 'camera_01'}</span>
-              <span>⚡ Severidad: <strong>${inc.severity || 'ALTO'}</strong></span>
+              <span><i data-lucide="video"></i> ${inc.camera_id || 'camera_01'}</span>
+              <span>Severidad: <strong>${inc.severity || 'ALTO'}</strong></span>
               ${plateBadge}
               ${ticketBadge}
               ${snapBadge}
@@ -395,6 +337,7 @@
 
     function renderHistoryPlates(plates) {
       const container = document.getElementById('history-plates-list');
+      if (!container) return;
       if (!plates || plates.length === 0) {
         container.innerHTML = `<div class="empty-state">No hay placas registradas aún.</div>`;
         return;
@@ -451,6 +394,11 @@
     }
 
     function renderDossierDetails(d) {
+      const emptyPrompt = document.getElementById('dossier-empty-prompt');
+      const dossierView = document.getElementById('detailed-dossier-view');
+      if (emptyPrompt) emptyPrompt.style.display = 'none';
+      if (dossierView) dossierView.style.display = 'flex';
+
       const enr = d.enrichment || {};
       const ms = enr.microservice_dossier || d;
       const envRisk = ms.environmental_risk || enr.weather || {};
@@ -459,7 +407,7 @@
 
       document.getElementById('det-inc-id').textContent = d.incident_id || ms.incident_id || '---';
       document.getElementById('det-inc-severity').textContent = d.severity || ms.severity_level || 'CRÍTICO';
-      document.getElementById('det-cad-ticket').textContent = d.dispatch_ticket_id || ms.dispatch_ticket_id || 'CAD-911-ACTIVO';
+      document.getElementById('det-cad-ticket').textContent = d.dispatch_ticket_id || ms.dispatch_ticket_id || 'PENDIENTE';
       document.getElementById('dossier-ticket-tag').textContent = d.dispatch_ticket_id || ms.dispatch_ticket_id || 'EXPEDIENTE VERIFICADO';
       document.getElementById('det-status').textContent = d.status || ms.status || 'PENDIENTE';
       document.getElementById('det-camera').textContent = d.camera_id || ms.camera_id || 'camera_01';
@@ -474,10 +422,10 @@
         document.getElementById('det-kinematics').textContent = `Energía óptica: ${tel.motion_energy || 0} | FPS: ${tel.fps || 25}`;
       }
 
-      const temp = envRisk.temperature_c !== undefined ? `${envRisk.temperature_c}°C` : '21°C';
-      const wind = envRisk.wind_speed_kmh !== undefined ? `${envRisk.wind_speed_kmh} km/h` : '12 km/h';
-      document.getElementById('det-weather').textContent = `${temp} | ${wind} (${envRisk.weather_condition || envRisk.description || 'Despejado'})`;
-      document.getElementById('det-smoke').textContent = envRisk.smoke_dispersion_direction || 'Noreste (NE)';
+      const temp = envRisk.temperature_c !== undefined ? `${envRisk.temperature_c}°C` : '--°C';
+      const wind = envRisk.wind_speed_kmh !== undefined ? `${envRisk.wind_speed_kmh} km/h` : '-- km/h';
+      document.getElementById('det-weather').textContent = `${temp} | ${wind} (${envRisk.weather_condition || envRisk.description || 'Normal'})`;
+      document.getElementById('det-smoke').textContent = envRisk.smoke_dispersion_direction || '---';
       document.getElementById('det-pavement').textContent = envRisk.pavement_status || envRisk.pavement_risk || 'Pavimento Seco';
 
       const snapContainer = document.getElementById('det-snapshot-container');
@@ -493,7 +441,6 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       loadFullBacklog(true);
-      inspectIncidentDossier('INC-2026-004812');
 
       document.getElementById('filter-status').addEventListener('change', () => loadFullBacklog(false));
       document.getElementById('filter-type').addEventListener('change', () => loadFullBacklog(false));
@@ -503,23 +450,28 @@
         if (val) inspectIncidentDossier(val);
       });
 
-      document.getElementById('btn-simulate-cad').addEventListener('click', async () => {
-        const res = await fetch('/api/enrichment/dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            incident_type: 'colision_critica',
-            title: 'COLISIÓN VEHICULAR CONFIRMADA',
-            subtitle: 'Desaceleración severa evaluada por Microservicio CAD-911',
-            plate: 'XYZ-789-A',
-          }),
+      const triggerBtn = document.getElementById('btn-toggle-sidebar');
+      const closeBtn = document.getElementById('btn-close-sidebar');
+      const shell = document.getElementById('app-shell');
+      const sidebar = document.getElementById('app-sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      if (triggerBtn) {
+        triggerBtn.addEventListener('click', () => {
+          if (window.innerWidth <= 900) {
+            const isOpen = sidebar.classList.toggle('open');
+            if (backdrop) backdrop.classList.toggle('active', isOpen);
+          } else if (shell) {
+            shell.classList.toggle('sidebar-collapsed');
+          }
         });
-        if (res.ok) {
-          const data = await res.json();
-          const incId = (data.microservice_dossier && data.microservice_dossier.incident_id) || data.event_id;
-          await loadFullBacklog(false);
-          if (incId) inspectIncidentDossier(incId);
-        }
+      }
+      if (closeBtn) closeBtn.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('active');
+      });
+      if (backdrop) backdrop.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('active');
       });
 
       if (window.lucide) lucide.createIcons();
@@ -527,4 +479,3 @@
   </script>
 </body>
 </html>
-

@@ -1,13 +1,20 @@
 /**
  * TITAN // Tactical Incident & Fire Detector - PWA Core Controller
  * Manejo de WebSockets, Telemetría Táctica, Audio Sintetizado,
- * Enlace de Cámara de Smartphone (Uplink), PWA Install y Service Worker.
+ * Navegación por Sidebar (Home, Enriquecimiento, Historial),
+ * Enlace de Cámara de Smartphone (Uplink) y Service Worker.
  */
 
 // --- 1. Textos Multilingües (i18n) ---
 const I18N_DICTIONARY = {
   es: {
     sub: "CENTRO TÁCTICO DE DETECCIÓN VIAL & INCENDIOS",
+    view_home: "MONITOR TÁCTICO EN VIVO",
+    view_enrich: "ENRIQUECIMIENTO & CONSULTA ALPR",
+    view_history: "HISTORIAL FORENSE & BACKLOG",
+    nav_home: "Home",
+    nav_enrich: "Enriquecimiento",
+    nav_history: "Historial",
     status_live: "EN VIVO",
     src_label: "FUENTE",
     install: "INSTALAR PWA",
@@ -22,15 +29,17 @@ const I18N_DICTIONARY = {
     card_fire: "FUEGO",
     card_smoke: "HUMO",
     card_inc: "SINIESTROS",
-    card_plates: "PLACAS (ALPR)",
-    plates_title: "CONSULTA VEHICULAR & PLACAS",
-    enrich_title: "CONTEXTO SITUACIONAL (APIs)",
+    card_plates: "PLACAS",
+    sidebar_plates_title: "PLACAS DETECTADAS",
+    no_plates: "Sin placas en escena",
+    plates_title: "CONSULTA VEHICULAR & PLACAS (ALPR)",
+    enrich_title: "CONTEXTO SITUACIONAL & AMBIENTAL",
     ctrl_title: "CONFIGURACIÓN & SENSIBILIDAD",
     vehicle_sens: "Sensibilidad de Vehículos:",
     fire_sens: "Sensibilidad de Fuego:",
     smoke_sens: "Sensibilidad de Humo:",
     tracking_title: "ENTIDADES EN RASTREO ACTIVO",
-    blackbox_title: "REGISTRO DE SINIESTROS & ALARMAS",
+    blackbox_title: "BITÁCORA FORENSE DE SINIESTROS",
     no_entities: "Buscando entidades en el campo visual...",
     no_incidents: "Sin anomalías críticas registradas. Sistema seguro.",
     safe: "SEGURO",
@@ -39,6 +48,12 @@ const I18N_DICTIONARY = {
   },
   en: {
     sub: "TACTICAL ROAD INCIDENT & FIRE DETECTION HUB",
+    view_home: "LIVE TACTICAL MONITOR",
+    view_enrich: "ENRICHMENT & ALPR LOOKUP",
+    view_history: "FORENSIC HISTORY & BACKLOG",
+    nav_home: "Home",
+    nav_enrich: "Enrichment",
+    nav_history: "History",
     status_live: "LIVE",
     src_label: "SOURCE",
     install: "INSTALL PWA",
@@ -53,15 +68,17 @@ const I18N_DICTIONARY = {
     card_fire: "FIRE",
     card_smoke: "SMOKE",
     card_inc: "INCIDENTS",
-    card_plates: "PLATES (ALPR)",
-    plates_title: "VEHICLE & PLATE LOOKUP",
-    enrich_title: "SITUATIONAL CONTEXT (APIs)",
+    card_plates: "PLATES",
+    sidebar_plates_title: "DETECTED PLATES",
+    no_plates: "No plates in scene",
+    plates_title: "VEHICLE & PLATE LOOKUP (ALPR)",
+    enrich_title: "SITUATIONAL & ENVIRONMENTAL CONTEXT",
     ctrl_title: "SETTINGS & SENSITIVITY",
     vehicle_sens: "Vehicle Sensitivity:",
     fire_sens: "Fire Sensitivity:",
     smoke_sens: "Smoke Sensitivity:",
     tracking_title: "ACTIVE TRACKED ENTITIES",
-    blackbox_title: "INCIDENTS & FLIGHT RECORDER",
+    blackbox_title: "FORENSIC INCIDENT BACKLOG",
     no_entities: "Scanning for entities in viewport...",
     no_incidents: "No critical anomalies logged. Perimeter safe.",
     safe: "SAFE",
@@ -71,6 +88,7 @@ const I18N_DICTIONARY = {
 };
 
 let currentLang = localStorage.getItem("titan_lang") || "es";
+let currentView = "home";
 let isAudioEnabled = localStorage.getItem("titan_audio") !== "false";
 let isPaused = false;
 let deferredPrompt = null;
@@ -80,12 +98,12 @@ let clientVideoStream = null;
 let uplinkInterval = null;
 let lastIncidentId = 0;
 let audioContext = null;
-let userHasSearchedPlate = false;
+let latestTelemetryState = null;
 
 // --- 2. Registro del Service Worker y PWA Install Prompt ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=8')
+    navigator.serviceWorker.register('/sw.js?v=13')
       .then((reg) => console.log('[PWA] Service Worker registrado:', reg.scope))
       .catch((err) => console.warn('[PWA] Fallo al registrar Service Worker:', err));
   });
@@ -108,6 +126,49 @@ if (btnInstall) {
       btnInstall.style.display = 'none';
     }
   });
+}
+
+// --- 2b. Navegación por Vistas en Sidebar (Home, Enriquecimiento, Historial) ---
+function switchAppView(viewName, updateHash = true) {
+  const validViews = ['home', 'enriquecimiento', 'historial'];
+  const targetView = validViews.includes(viewName) ? viewName : 'home';
+  currentView = targetView;
+
+  document.body.setAttribute('data-active-view', targetView);
+
+  const footerControls = document.querySelector('.footer-controls-left');
+  if (footerControls) {
+    footerControls.style.display = targetView === 'home' ? 'flex' : 'none';
+  }
+
+  document.querySelectorAll('.sidebar-nav-item[data-view]').forEach((btn) => {
+    const isMatch = btn.getAttribute('data-view') === targetView;
+    btn.classList.toggle('active', isMatch);
+  });
+
+  document.querySelectorAll('.view-section[data-view-panel]').forEach((panel) => {
+    const isMatch = panel.getAttribute('data-view-panel') === targetView;
+    panel.classList.toggle('active', isMatch);
+  });
+
+  if (updateHash && window.location.pathname === '/') {
+    const newHash = targetView === 'home' ? '' : `#${targetView}`;
+    if (window.location.hash !== newHash) {
+      history.replaceState(null, '', newHash || window.location.pathname);
+    }
+  }
+
+  // Cerrar drawer en móvil al elegir sección
+  const sidebar = document.getElementById('app-sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (sidebar) sidebar.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('active');
+
+  if (targetView === 'enriquecimiento') {
+    loadSituationalContext();
+  } else if (targetView === 'historial') {
+    loadFullBacklog(false);
+  }
 }
 
 // --- 3. Motor de Audio (Alarma Sonora Personalizada & Web Audio Fallback) ---
@@ -133,7 +194,6 @@ function initAudio() {
   }
 }
 
-// Desbloquear contexto de audio con la primera interacción del usuario
 window.addEventListener('click', () => { initAudio(); }, { once: true });
 window.addEventListener('touchstart', () => { initAudio(); }, { once: true });
 
@@ -165,7 +225,6 @@ function playSynthesizedSirenFallback() {
   osc.type = 'sawtooth';
   const now = audioContext.currentTime;
 
-  // Modulación dual de sirena táctica (800Hz a 1200Hz)
   osc.frequency.setValueAtTime(750, now);
   osc.frequency.linearRampToValueAtTime(1150, now + 0.25);
   osc.frequency.linearRampToValueAtTime(750, now + 0.5);
@@ -205,7 +264,6 @@ function playEmergencySiren() {
     playSynthesizedSirenFallback();
   }
 
-  // Vibración háptica en móviles si está disponible
   if ('vibrate' in navigator) {
     navigator.vibrate([200, 100, 200]);
   }
@@ -237,12 +295,13 @@ function startHttpTelemetryPolling() {
       if (res.ok) {
         const data = await res.json();
         handleTelemetryIncoming(data);
-        document.getElementById('stream-loader').classList.add('hidden');
+        const loader = document.getElementById('stream-loader');
+        if (loader) loader.classList.add('hidden');
       }
     } catch (e) {
       console.debug('[HTTP Telemetry] Esperando enlace...');
     }
-  }, 1000); // 1000ms evita saturar la red mientras se conecta el WebSocket
+  }, 1000);
 }
 
 function stopHttpTelemetryPolling() {
@@ -256,7 +315,6 @@ function connectTelemetryWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
 
-  // Arrancar polling HTTP inmediato como salvaguarda
   startHttpTelemetryPolling();
 
   try {
@@ -265,8 +323,8 @@ function connectTelemetryWebSocket() {
     wsTelemetry.onopen = () => {
       console.log('[WS] Enlace de telemetría conectado.');
       stopHttpTelemetryPolling();
-      document.getElementById('stream-loader').classList.add('hidden');
-      // Sincronizar idioma actual con el servidor
+      const loader = document.getElementById('stream-loader');
+      if (loader) loader.classList.add('hidden');
       sendControl({ action: 'set_lang', lang: currentLang });
     };
 
@@ -313,17 +371,27 @@ async function sendControl(payload) {
 
 // --- 5. Actualización de Interfaz y Telemetría en Vivo ---
 function updateTelemetryUI(data) {
-  // Ocultar pantalla de carga al recibir cualquier telemetría válida
+  latestTelemetryState = data;
+
   const loader = document.getElementById('stream-loader');
   if (loader) loader.classList.add('hidden');
 
-  // FPS y Fuente
   const fpsElem = document.getElementById('metric-fps');
   if (fpsElem) fpsElem.textContent = data.fps ? data.fps.toFixed(1) : '0.0';
   const srcElem = document.getElementById('metric-source');
-  if (srcElem) srcElem.textContent = (data.source || '0').toUpperCase();
+  if (srcElem) srcElem.textContent = (data.source || 'STREAM').toUpperCase();
 
-  // Contadores
+  const videoSelect = document.getElementById('select-video-sample');
+  if (videoSelect && data.source && document.activeElement !== videoSelect) {
+    const normalizedSrc = String(data.source).replace(/^.*[\\/]/, '');
+    const matchingOption = Array.from(videoSelect.options).find(
+      (opt) => opt.value.toLowerCase() === normalizedSrc.toLowerCase() || opt.value === data.source
+    );
+    if (matchingOption && videoSelect.value !== matchingOption.value) {
+      videoSelect.value = matchingOption.value;
+    }
+  }
+
   const counts = data.counts || {};
   const vehElem = document.getElementById('metric-vehicles-count');
   if (vehElem) vehElem.textContent = counts.vehicles || 0;
@@ -332,28 +400,28 @@ function updateTelemetryUI(data) {
   const incElem = document.getElementById('metric-incidents-count');
   if (incElem) incElem.textContent = counts.incidents || 0;
 
-  // Estado Fuego (Independiente)
+  // Estado Fuego
   const fireCount = counts.fire || 0;
   const cardFire = document.getElementById('card-fire');
   const fireStatus = document.getElementById('metric-fire-status');
   if (cardFire && fireStatus) {
     if (fireCount > 0) {
       cardFire.classList.add('danger-active');
-      fireStatus.textContent = `${fireCount} DETECTADO`;
+      fireStatus.textContent = `${fireCount}`;
     } else {
       cardFire.classList.remove('danger-active');
       fireStatus.textContent = '0';
     }
   }
 
-  // Estado Humo (Independiente)
+  // Estado Humo
   const smokeCount = counts.smoke || 0;
   const cardSmoke = document.getElementById('card-smoke');
   const smokeStatus = document.getElementById('metric-smoke-status');
   if (cardSmoke && smokeStatus) {
     if (smokeCount > 0) {
       cardSmoke.classList.add('smoke-active');
-      smokeStatus.textContent = `${smokeCount} DETECTADO`;
+      smokeStatus.textContent = `${smokeCount}`;
     } else {
       cardSmoke.classList.remove('smoke-active');
       smokeStatus.textContent = '0';
@@ -366,7 +434,6 @@ function updateTelemetryUI(data) {
     platesCountElem.textContent = counts.plates || (data.plates ? data.plates.length : 0);
   }
 
-  // Feed de Placas en Vivo
   if (data.plates) {
     renderRecentPlatesFeed(data.plates);
   }
@@ -379,7 +446,7 @@ function updateTelemetryUI(data) {
   const motionBarElem = document.getElementById('motion-bar-fill');
   if (motionBarElem) motionBarElem.style.width = `${Math.max(5, motionPct)}%`;
 
-  // Banner de Alerta Activa con control de estado (evita re-renderizado repetitivo)
+  // Banner de Alerta Activa
   const banner = document.getElementById('emergency-banner');
   if (banner) {
     if (data.active_alert) {
@@ -413,14 +480,10 @@ function updateTelemetryUI(data) {
     }
   }
 
-  // Lista de Entidades en Tránsito
   renderEntitiesList(data.entities || []);
-
-  // Dibujar cajas y alertas de IA sobre la cámara local en vivo
   drawTacticalOverlay(data);
 }
 
-// Iconos SVG inline ultra-ligeros (0ms de overhead, cero layout thrashing)
 const SVG_ICONS = {
   user: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
   car: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`,
@@ -442,104 +505,168 @@ function renderEntitiesList(entities) {
     return;
   }
 
-  // Comprobar si el estado cambió antes de tocar el DOM
-  const sig = entities.map((e) => `${e.id}:${e.speed}:${e.plate || ''}`).join('|');
+  const sig = entities.map((e) => `${e.raw_class || e.class}:${e.speed}:${e.plate || ''}`).join('|');
   if (sig === lastEntitiesSignature) return;
   lastEntitiesSignature = sig;
 
+  const persons = entities.filter((ent) => (ent.raw_class || '').toLowerCase() in { persona: 1, person: 1 });
+  const vehicles = entities.filter((ent) => !((ent.raw_class || '').toLowerCase() in { persona: 1, person: 1 }));
+
   let html = '';
-  entities.forEach((ent) => {
-    const isPerson = (ent.raw_class || '').toLowerCase() in { persona: 1, person: 1 };
+
+  // Agrupar peatones en un único indicador limpio sin velocidad ni ID innecesario
+  if (persons.length > 0) {
+    const label = persons.length === 1 ? 'Peatón en escena' : `Peatones (${persons.length})`;
+    html += `
+      <div class="entity-chip person">
+        <span>${SVG_ICONS.user} ${label}</span>
+      </div>
+    `;
+  }
+
+  // Mostrar máximo 2 vehículos en tiempo real y resumir el resto para evitar scrollbars en el sidebar
+  const maxVisibleVehicles = persons.length > 0 ? 2 : 3;
+  const visibleVehicles = vehicles.slice(0, maxVisibleVehicles);
+  const extraVehiclesCount = vehicles.length - visibleVehicles.length;
+
+  visibleVehicles.forEach((ent) => {
     const isSpeeding = ent.speed > 50.0;
-    const typeClass = isPerson ? 'person' : (isSpeeding ? 'speeding' : '');
-    const iconSvg = isPerson ? SVG_ICONS.user : SVG_ICONS.car;
+    const typeClass = isSpeeding ? 'speeding' : '';
     const plateHtml = ent.plate ? `<span class="chip-plate-tag">[${ent.plate}]</span>` : '';
 
     html += `
       <div class="entity-chip ${typeClass}">
-        <span>${iconSvg} #${ent.id} ${ent.class} ${plateHtml}</span>
+        <span>${SVG_ICONS.car} ${ent.class} ${plateHtml}</span>
         <span class="speed-tag">${ent.speed} km/h</span>
       </div>
     `;
   });
+
+  if (extraVehiclesCount > 0) {
+    html += `
+      <div class="entity-chip">
+        <span>+${extraVehiclesCount} más</span>
+      </div>
+    `;
+  }
+
   container.innerHTML = html;
 }
 
-// Render del Feed de Placas Detectadas en Vivo con diffing
 let lastPlatesSignature = null;
 function renderRecentPlatesFeed(plates) {
-  const container = document.getElementById('recent-plates-feed');
-  const countBadge = document.getElementById('plates-live-count');
-  if (countBadge) countBadge.textContent = plates.length;
+  const enrichContainer = document.getElementById('recent-plates-feed');
+  const enrichCountBadge = document.getElementById('plates-live-count');
+  const sidebarContainer = document.getElementById('sidebar-plates-feed');
+  const sidebarCountBadge = document.getElementById('sidebar-plates-count');
+
+  const count = (plates && plates.length) || 0;
+  if (enrichCountBadge) enrichCountBadge.textContent = count;
+  if (sidebarCountBadge) sidebarCountBadge.textContent = count;
 
   if (!plates || plates.length === 0) {
     if (lastPlatesSignature !== "empty") {
       lastPlatesSignature = "empty";
-      container.innerHTML = `<div class="empty-state">No se han detectado placas aún en la escena.</div>`;
+      const emptyText = (window.I18N_DICTIONARY && I18N_DICTIONARY[currentLang] && I18N_DICTIONARY[currentLang].no_plates)
+        || "Sin placas en escena";
+      if (enrichContainer) {
+        enrichContainer.innerHTML = `<div class="empty-state">No se han detectado placas aún en la escena.</div>`;
+      }
+      if (sidebarContainer) {
+        sidebarContainer.innerHTML = `<div class="empty-state" id="sidebar-no-plates">${emptyText}</div>`;
+      }
     }
     return;
   }
 
-  const sig = plates.map((p) => `${p.plate}:${p.confidence}`).join('|');
+  const sig = plates.map((p) => `${p.plate}:${p.confidence}:${p.thumbnail ? 'thumb' : 'nothumb'}`).join('|');
   if (sig === lastPlatesSignature) return;
   lastPlatesSignature = sig;
 
-  let html = '';
-  plates.forEach((p) => {
-    const v = p.vehicle_data || {};
-    const thumbHtml = p.thumbnail
-      ? `<img src="${p.thumbnail}" class="plate-feed-thumb" alt="${p.plate}">`
-      : `<span class="thumb-placeholder">${SVG_ICONS.scan}</span>`;
+  // 1. Render para la sección de Enriquecimiento (Panel ALPR)
+  if (enrichContainer) {
+    let enrichHtml = '';
+    plates.forEach((p) => {
+      const v = p.vehicle_data || {};
+      const thumbHtml = p.thumbnail
+        ? `<img src="${p.thumbnail}" class="plate-feed-thumb" alt="${p.plate}">`
+        : `<span class="thumb-placeholder">${SVG_ICONS.scan}</span>`;
 
-    html += `
-      <div class="plate-feed-item" onclick="lookupPlate('${p.plate}')" title="Click para ver expediente completo">
-        <div class="plate-feed-left">
-          ${thumbHtml}
-          <div>
-            <div class="plate-feed-tag">${p.plate}</div>
-            <div class="plate-feed-veh">${v.brand || 'Vehículo'} ${v.model || ''}</div>
+      enrichHtml += `
+        <div class="plate-feed-item" onclick="lookupPlate('${p.plate}')" title="Clic para consultar expediente vehicular">
+          <div class="plate-feed-left">
+            ${thumbHtml}
+            <div>
+              <div class="plate-feed-tag">${p.plate}</div>
+              <div class="plate-feed-veh">${v.brand || 'Vehículo'} ${v.model || ''}</div>
+            </div>
+          </div>
+          <span class="alpr-model-tag">${Math.round(p.confidence * 100)}%</span>
+        </div>
+      `;
+    });
+    enrichContainer.innerHTML = enrichHtml;
+  }
+
+  // 2. Render para la Card persistente en el Sidebar (Siempre a la vista de la cámara)
+  if (sidebarContainer) {
+    let sidebarHtml = '';
+    plates.forEach((p) => {
+      const v = p.vehicle_data || {};
+      const brandModel = (v.brand ? `${v.brand} ${v.model || ''}` : 'Vehículo detectado').trim();
+      const thumbHtml = p.thumbnail
+        ? `<img src="${p.thumbnail}" class="sidebar-plate-thumb" alt="${p.plate}">`
+        : `<span class="sidebar-plate-thumb-placeholder">${SVG_ICONS.scan}</span>`;
+
+      sidebarHtml += `
+        <div class="sidebar-plate-item" onclick="selectPlateAndEnrich('${p.plate}')" title="Clic para ver expediente completo en Enriquecimiento">
+          <div class="sidebar-plate-left">
+            ${thumbHtml}
+            <div class="sidebar-plate-meta">
+              <span class="sidebar-plate-tag">${p.plate}</span>
+              <span class="sidebar-plate-sub">${brandModel}</span>
+            </div>
+          </div>
+          <div class="sidebar-plate-right">
+            <span class="sidebar-plate-badge">${Math.round(p.confidence * 100)}%</span>
+            <i data-lucide="chevron-right" class="sidebar-plate-arrow"></i>
           </div>
         </div>
-        <span class="alpr-model-tag">${Math.round(p.confidence * 100)}%</span>
-      </div>
-    `;
-  });
-  container.innerHTML = html;
-}
-
-// Consulta de Placa o VIN vía API REST
-async function lookupPlate(plateOrVin, isDemo = false) {
-  const input = document.getElementById('plate-search-input');
-
-  // Si es una consulta demo pero el usuario ya interactuó con el buscador, no interferir
-  if (isDemo && userHasSearchedPlate) {
-    return;
-  }
-  if (isDemo && input && input.value.trim() !== '' && input.value.trim() !== 'ABC-1234') {
-    return;
-  }
-
-  playTacticalChirp();
-
-  if (input) {
-    if (!isDemo) {
-      input.value = plateOrVin;
-      userHasSearchedPlate = true;
-    } else if (input.value.trim() === '') {
-      input.value = plateOrVin;
+      `;
+    });
+    sidebarContainer.innerHTML = sidebarHtml;
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons({ root: sidebarContainer });
     }
   }
+}
+
+// Navegar a la vista de Enriquecimiento y abrir el expediente de la placa seleccionada
+window.selectPlateAndEnrich = async function(plate) {
+  playTacticalChirp();
+  switchAppView('enriquecimiento', true);
+  await lookupPlate(plate);
+};
+
+// Consulta de Placa o VIN vía API REST
+async function lookupPlate(plateOrVin, switchTab = false) {
+  if (!plateOrVin || !plateOrVin.trim()) return;
+  const cleanQuery = plateOrVin.trim();
+  const input = document.getElementById('plate-search-input');
+
+  playTacticalChirp();
+  if (input) input.value = cleanQuery;
+  if (switchTab) switchAppView('enriquecimiento', true);
 
   try {
     const res = await fetch('/api/plates/lookup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: plateOrVin, plate: plateOrVin }),
+      body: JSON.stringify({ query: cleanQuery, plate: cleanQuery }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      if (isDemo && userHasSearchedPlate) return;
       renderVehicleDossier(data);
     }
   } catch (err) {
@@ -547,7 +674,6 @@ async function lookupPlate(plateOrVin, isDemo = false) {
   }
 }
 
-// Renderizado del Expediente de Vehículo (Dossier)
 function renderVehicleDossier(data) {
   const dossier = document.getElementById('vehicle-dossier');
   if (!dossier) return;
@@ -583,11 +709,9 @@ function renderVehicleDossier(data) {
   if (window.lucide) lucide.createIcons();
 }
 
-// Variable global para coordenadas obtenidas por GPS en el navegador
 let userCoords = null;
 
 function requestUserLocation() {
-  // Carga inicial inmediata de contexto situacional sin esperar al GPS
   loadSituationalContext();
 
   if (navigator.geolocation) {
@@ -597,7 +721,6 @@ function requestUserLocation() {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude
         };
-        console.log('[GPS] Ubicación física autorizada por usuario:', userCoords);
         loadSituationalContext();
       },
       (err) => {
@@ -608,7 +731,6 @@ function requestUserLocation() {
   }
 }
 
-// Consulta de Contexto Situacional (Clima, Ubicación y Riesgos del Microservicio)
 async function loadSituationalContext() {
   try {
     const query = userCoords ? `?lat=${userCoords.lat}&lon=${userCoords.lon}` : '';
@@ -662,17 +784,38 @@ async function loadSituationalContext() {
 async function triggerMicroserviceCadDispatch() {
   playTacticalChirp();
   const plateInput = document.getElementById('plate-search-input');
-  const currentPlate = (plateInput && plateInput.value.trim()) ? plateInput.value.trim() : 'ABC-1234';
-  showSystemToast(`🚨 Evaluando siniestro en Microservicio REST y despachando CAD-911 (${currentPlate})...`);
+  const activePlates = (latestTelemetryState && latestTelemetryState.plates) || [];
+  const detectedPlate = activePlates.length > 0 ? activePlates[0].plate : null;
+  const currentPlate = (plateInput && plateInput.value.trim()) ? plateInput.value.trim() : detectedPlate;
+
+  const activeAlert = latestTelemetryState && latestTelemetryState.active_alert;
+  const counts = (latestTelemetryState && latestTelemetryState.counts) || {};
+  let incType = 'colision_critica';
+  let incTitle = 'INCIDENTE VIAL REPORTADO EN MONITOR';
+  let incSubtitle = 'Evaluado por Microservicio de Enriquecimiento & Despacho';
+
+  if (activeAlert) {
+    incType = activeAlert.is_smoke ? 'humo_detectado' : 'colision_critica';
+    incTitle = activeAlert.title || incTitle;
+    incSubtitle = activeAlert.subtitle || incSubtitle;
+  } else if ((counts.fire || 0) > 0) {
+    incType = 'fuego_confirmado';
+    incTitle = 'CONATO DE INCENDIO DETECTADO';
+  } else if ((counts.smoke || 0) > 0) {
+    incType = 'humo_detectado';
+    incTitle = 'COLUMNA DE HUMO DETECTADA';
+  }
+
+  showSystemToast(`Evaluando contexto situacional y despachando alerta CAD-911${currentPlate ? ' (' + currentPlate + ')' : ''}...`);
 
   try {
     const res = await fetch('/api/enrichment/dispatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        incident_type: 'colision_critica',
-        title: 'COLISIÓN VEHICULAR CONFIRMADA',
-        subtitle: 'Evaluado por Microservicio de Enriquecimiento & Despacho',
+        incident_type: incType,
+        title: incTitle,
+        subtitle: incSubtitle,
         plate: currentPlate,
       }),
     });
@@ -695,23 +838,24 @@ async function triggerMicroserviceCadDispatch() {
         const dispStatusEl = document.getElementById('ms-dispatch-status');
         if (dispStatusEl) dispStatusEl.textContent = ms.dispatch_status || 'DELIVERED';
         const smokeDirEl = document.getElementById('ms-smoke-dir');
-        if (smokeDirEl) smokeDirEl.textContent = envRisk.smoke_dispersion_direction || 'Noreste (NE)';
+        if (smokeDirEl) smokeDirEl.textContent = envRisk.smoke_dispersion_direction || '---';
         const smsEl = document.getElementById('ms-sms-status');
-        if (smsEl) smsEl.textContent = sms.sms_sent ? `ENVIADO (${sms.destination || 'Twilio'})` : 'REGISTRADO EN COLA';
+        if (smsEl) smsEl.textContent = sms.sms_sent ? `ENVIADO (${sms.destination || 'Twilio'})` : 'REGISTRADO';
       }
 
-      showSystemToast(`✅ Ticket ${ms.dispatch_ticket_id || 'CAD-911'} generado y guardado en /historial`);
+      showSystemToast(`Ticket ${ms.dispatch_ticket_id || 'CAD-911'} registrado en el Historial.`);
       loadIncidentsHistory();
+      loadFullBacklog(false);
     } else {
-      showSystemToast('⚠️ Error al evaluar despacho en el microservicio.');
+      showSystemToast('Error al procesar el despacho en el microservicio.');
     }
   } catch (err) {
     console.error('Error despachando incidente:', err);
-    showSystemToast('❌ Error de red al contactar servicio de despacho.');
+    showSystemToast('Error de red al contactar servicio de despacho.');
   }
 }
 
-// Carga inicial y actualización de bitácora histórica
+// --- 5b. Validación HTTPS, Backlog & Historial Forense ---
 let latestHttpsValidation = null;
 
 async function validateCameraHttpsRoute() {
@@ -759,9 +903,12 @@ async function loadBacklogStatus() {
     const res = await fetch('/api/backlog/status');
     if (res.ok) {
       const st = await res.json();
+      const count = (st.backlog_counts && st.backlog_counts.incidents) || 0;
+      const navBadge = document.getElementById('nav-incidents-badge');
+      if (navBadge) navBadge.textContent = count;
+
       const badge = document.getElementById('supabase-status-badge');
       if (badge) {
-        const count = (st.backlog_counts && st.backlog_counts.incidents) || 0;
         if (st.connected) {
           badge.textContent = `SUPABASE CLOUD (${count})`;
           badge.style.color = '#00ff9d';
@@ -789,8 +936,9 @@ window.cycleIncidentBacklogStatus = async function(incidentId, currentStatus) {
       body: JSON.stringify({ status: nextStatus }),
     });
     if (res.ok) {
-      showSystemToast(`Backlog ${incidentId}: ${nextStatus}`);
+      showSystemToast(`Incidente ${incidentId}: ${nextStatus}`);
       loadIncidentsHistory();
+      loadFullBacklog(false);
     }
   } catch (e) {
     console.warn('Error actualizando estatus en backlog:', e);
@@ -812,22 +960,20 @@ async function loadIncidentsHistory() {
 
 function renderIncidentTimeline(incidents) {
   const container = document.getElementById('incident-timeline');
+  if (!container) return;
   if (!incidents || incidents.length === 0) {
     container.innerHTML = `<div class="empty-state">${I18N_DICTIONARY[currentLang].no_incidents}</div>`;
     return;
   }
 
   let html = '';
-  incidents.forEach((item) => {
+  incidents.slice(0, 6).forEach((item) => {
     const isSmoke = item.type === 'humo_detectado';
     const incId = item.incident_id || item.id || '';
     const incStatus = (item.status || 'PENDIENTE').toUpperCase();
     const statusColor = incStatus === 'RESUELTO' ? '#00ff9d' : (incStatus === 'EN_ATENCION' ? '#00f0ff' : '#ffaa00');
     const statusBadge = incId
-      ? `<span class="chip-plate-tag" onclick="window.cycleIncidentBacklogStatus('${incId}', '${incStatus}')" title="Clic para cambiar estado en Backlog" style="cursor:pointer; border-color:${statusColor}; color:${statusColor}; margin-left:6px;">${incStatus}</span>`
-      : '';
-    const snapshotHtml = item.snapshot_url
-      ? `<a href="${item.snapshot_url}" target="_blank" rel="noopener" class="chip-plate-tag" style="margin-left:6px; text-decoration:none;">📸 EVIDENCIA</a>`
+      ? `<span class="chip-plate-tag" onclick="window.cycleIncidentBacklogStatus('${incId}', '${incStatus}')" title="Clic para cambiar estado" style="cursor:pointer; border-color:${statusColor}; color:${statusColor}; margin-left:6px;">${incStatus}</span>`
       : '';
     const plateHtml = item.plate
       ? `<span class="chip-plate-tag" style="display:inline-flex; align-items:center; gap:3px; margin-left:6px;"><i data-lucide="scan-line"></i> ${item.plate}</span>`
@@ -835,15 +981,173 @@ function renderIncidentTimeline(incidents) {
     html += `
       <div class="timeline-item ${isSmoke ? 'smoke-item' : ''}">
         <div class="item-main">
-          <span class="item-title">${item.title} ${plateHtml}${statusBadge}${snapshotHtml}</span>
+          <span class="item-title">${item.title} ${plateHtml}${statusBadge}</span>
           <span class="item-sub">${item.subtitle}</span>
         </div>
-        <span class="item-time">${item.timestamp}</span>
+        <span class="item-time">${item.timestamp || ''}</span>
       </div>
     `;
   });
   container.innerHTML = html;
   if (window.lucide) lucide.createIcons();
+}
+
+// Funciones de la vista Historial integrada
+async function loadFullBacklog(syncCloud = false) {
+  const listContainer = document.getElementById('history-incidents-list');
+  if (!listContainer) return;
+
+  const statusFilterEl = document.getElementById('filter-status');
+  const typeFilterEl = document.getElementById('filter-type');
+  const statusFilter = statusFilterEl ? statusFilterEl.value : '';
+  const typeFilter = typeFilterEl ? typeFilterEl.value : '';
+
+  const params = new URLSearchParams({ limit: '150' });
+  if (statusFilter) params.set('status', statusFilter);
+  if (typeFilter) params.set('incident_type', typeFilter);
+  if (syncCloud) params.set('sync', 'true');
+
+  try {
+    const res = await fetch(`/api/backlog?${params.toString()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const incidents = data.incidents || [];
+
+    const totalEl = document.getElementById('stat-total-incidents');
+    const pendingEl = document.getElementById('stat-pending-incidents');
+    const resolvedEl = document.getElementById('stat-resolved-incidents');
+    if (totalEl) totalEl.textContent = incidents.length;
+    if (pendingEl) pendingEl.textContent = incidents.filter(i => (i.status || '').toUpperCase() !== 'RESUELTO').length;
+    if (resolvedEl) resolvedEl.textContent = incidents.filter(i => (i.status || '').toUpperCase() === 'RESUELTO').length;
+
+    const navBadge = document.getElementById('nav-incidents-badge');
+    if (navBadge && !statusFilter && !typeFilter) {
+      navBadge.textContent = incidents.length;
+    }
+
+    renderHistoryIncidents(incidents);
+  } catch (err) {
+    console.error('Error cargando backlog en vista historial:', err);
+  }
+}
+
+function renderHistoryIncidents(incidents) {
+  const container = document.getElementById('history-incidents-list');
+  if (!container) return;
+  if (!incidents || incidents.length === 0) {
+    container.innerHTML = `<div class="empty-state">No hay incidentes registrados con los filtros actuales.</div>`;
+    return;
+  }
+
+  let html = '';
+  incidents.forEach((inc) => {
+    const incId = inc.incident_id || `ID-${inc.id || ''}`;
+    const status = (inc.status || 'PENDIENTE').toUpperCase();
+    const statusClass = `status-${status.toLowerCase()}`;
+    const statusColor = status === 'RESUELTO' ? '#00ff88' : (status === 'EN_ATENCION' ? '#00f0ff' : '#ffb700');
+    const veh = inc.vehicle_data || inc.vehicle || {};
+    const vehDesc = veh.brand ? `${veh.brand} ${veh.model || ''}` : '';
+    const plateBadge = inc.plate ? `<span class="chip-plate-tag"><i data-lucide="scan-line"></i> ${inc.plate} ${vehDesc}</span>` : '';
+    const ticketBadge = inc.dispatch_ticket_id ? `<span class="chip-plate-tag" style="border-color:#00ff88;color:#00ff88;"><i data-lucide="file-check-2"></i> ${inc.dispatch_ticket_id}</span>` : '';
+    const snapBadge = inc.snapshot_url ? `<a href="${inc.snapshot_url}" target="_blank" onclick="event.stopPropagation();" class="chip-plate-tag" style="text-decoration:none;"><i data-lucide="image"></i> EVIDENCIA</a>` : '';
+
+    html += `
+      <div class="history-card ${statusClass}" onclick="window.inspectIncidentDossier('${incId}')">
+        <div class="history-card-top">
+          <span class="history-card-id">${incId}</span>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="chip-plate-tag" onclick="event.stopPropagation(); window.cycleIncidentBacklogStatus('${incId}', '${status}')" style="cursor:pointer; border-color:${statusColor}; color:${statusColor};" title="Clic para cambiar estado">
+              ${status}
+            </span>
+            <span class="item-time">${inc.created_at ? inc.created_at.replace('T', ' ').slice(0, 19) : (inc.timestamp || '')}</span>
+          </div>
+        </div>
+        <div class="history-card-title">${inc.title || 'SINIESTRO VIAL'}</div>
+        <div class="item-sub">${inc.subtitle || ''}</div>
+        <div class="history-card-meta">
+          <span><i data-lucide="video"></i> ${inc.camera_id || 'camera_01'}</span>
+          <span>Severidad: <strong>${inc.severity || 'ALTO'}</strong></span>
+          ${plateBadge}
+          ${ticketBadge}
+          ${snapBadge}
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
+}
+
+window.inspectIncidentDossier = async function(incidentId) {
+  if (!incidentId) return;
+  const input = document.getElementById('dossier-id-input');
+  if (input) input.value = incidentId;
+  playTacticalChirp();
+
+  try {
+    const res = await fetch(`/api/enrichment/dossier/${encodeURIComponent(incidentId)}`);
+    if (!res.ok) {
+      showSystemToast(`Expediente ${incidentId} no encontrado.`);
+      return;
+    }
+    const d = await res.json();
+    renderDossierDetails(d);
+  } catch (e) {
+    console.error('Error consultando dossier:', e);
+  }
+};
+
+function renderDossierDetails(d) {
+  const emptyPrompt = document.getElementById('dossier-empty-prompt');
+  const dossierView = document.getElementById('detailed-dossier-view');
+  if (emptyPrompt) emptyPrompt.style.display = 'none';
+  if (dossierView) dossierView.style.display = 'flex';
+
+  const enr = d.enrichment || {};
+  const ms = enr.microservice_dossier || d;
+  const envRisk = ms.environmental_risk || enr.weather || {};
+  const tel = ms.telemetry || d.telemetry || {};
+  const veh = d.vehicle_data || d.vehicle || ms.vehicle_info || {};
+
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  setTxt('det-inc-id', d.incident_id || ms.incident_id || '---');
+  setTxt('det-inc-severity', d.severity || ms.severity_level || 'CRÍTICO');
+  setTxt('det-cad-ticket', d.dispatch_ticket_id || ms.dispatch_ticket_id || 'PENDIENTE');
+  setTxt('dossier-ticket-tag', d.dispatch_ticket_id || ms.dispatch_ticket_id || 'VERIFICADO');
+  setTxt('det-status', d.status || ms.status || 'PENDIENTE');
+  setTxt('det-camera', d.camera_id || ms.camera_id || 'camera_01');
+
+  const plateStr = d.plate || veh.plate || 'NO VISIBLE';
+  const brandModel = `${veh.brand || ''} ${veh.model || ''}`.trim();
+  setTxt('det-vehicle', brandModel ? `${plateStr} (${brandModel})` : plateStr);
+
+  if (tel.initial_speed_kmh !== undefined) {
+    setTxt('det-kinematics', `${tel.initial_speed_kmh} km/h → ${tel.impact_speed_kmh || 0} km/h (${tel.delta_time_sec || 0.4}s)`);
+  } else {
+    setTxt('det-kinematics', `Energía óptica: ${tel.motion_energy || 0} | FPS: ${tel.fps || 25}`);
+  }
+
+  const temp = envRisk.temperature_c !== undefined ? `${envRisk.temperature_c}°C` : '--°C';
+  const wind = envRisk.wind_speed_kmh !== undefined ? `${envRisk.wind_speed_kmh} km/h` : '-- km/h';
+  setTxt('det-weather', `${temp} | ${wind} (${envRisk.weather_condition || envRisk.description || 'Normal'})`);
+  setTxt('det-smoke', envRisk.smoke_dispersion_direction || '---');
+  setTxt('det-pavement', envRisk.pavement_status || envRisk.pavement_risk || 'Pavimento Seco');
+
+  const snapContainer = document.getElementById('det-snapshot-container');
+  const snapImg = document.getElementById('det-snapshot-img');
+  const snapUrl = d.snapshot_url || veh.snapshot_url;
+  if (snapContainer && snapImg) {
+    if (snapUrl) {
+      snapContainer.style.display = 'block';
+      snapImg.src = snapUrl;
+    } else {
+      snapContainer.style.display = 'none';
+    }
+  }
 }
 
 function showSystemToast(msg) {
@@ -895,7 +1199,6 @@ function drawTacticalOverlay(data) {
   const scaleX = width / 640;
   const scaleY = height / 480;
 
-  // 1. Entidades (vehículos, personas)
   const entities = data.entities || [];
   entities.forEach((ent) => {
     if (!ent.box || ent.box.length < 4) return;
@@ -909,14 +1212,12 @@ function drawTacticalOverlay(data) {
     const isSpeeding = ent.speed > 50.0;
     const boxColor = isPerson ? '#00ffd5' : (isSpeeding ? '#ff3b30' : '#00f0ff');
 
-    // Recuadro táctico con esquinas reforzadas
     ctx.lineWidth = 2;
     ctx.strokeStyle = boxColor;
     ctx.strokeRect(bx, by, bw, bh);
 
-    // Etiqueta superior
     const labelText = isPerson
-      ? `PEATÓN #${ent.id}`
+      ? 'PEATÓN'
       : `${(ent.class || 'VEHÍCULO').toUpperCase()} ${ent.speed ? ent.speed + ' km/h' : ''}`;
 
     ctx.font = 'bold 11px "JetBrains Mono", monospace';
@@ -930,7 +1231,6 @@ function drawTacticalOverlay(data) {
     ctx.fillText(labelText, bx + 5, Math.max(12, by - 5));
   });
 
-  // 2. Fuego y Humo
   const fireSmoke = data.fire_smoke || [];
   fireSmoke.forEach((fs) => {
     if (!fs.box || fs.box.length < 4) return;
@@ -949,7 +1249,7 @@ function drawTacticalOverlay(data) {
     ctx.strokeRect(bx, by, bw, bh);
     ctx.setLineDash([]);
 
-    const labelText = isFire ? '🔥 FUEGO' : '💨 HUMO';
+    const labelText = isFire ? 'FUEGO' : 'HUMO';
     ctx.font = 'bold 11px "JetBrains Mono", monospace';
     const textWidth = ctx.measureText(labelText).width;
     ctx.fillStyle = 'rgba(255, 42, 95, 0.9)';
@@ -990,7 +1290,7 @@ function startHttpUplinkFallback(videoElem, canvas, ctx) {
     } catch (e) {
       isSending = false;
     }
-  }, 80); // ~12 FPS
+  }, 80);
 }
 
 async function startDeviceCamera() {
@@ -1014,20 +1314,18 @@ async function startDeviceCamera() {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (!isLocal && window.location.protocol !== 'https:' && !(secCheck && secCheck.is_https)) {
       const targetHttps = (secCheck && secCheck.recommended_https_url) || `https://${window.location.host}${window.location.pathname}`;
-      showSystemToast(`🔒 Redirigiendo a ruta segura HTTPS para validar conexión de cámara: ${targetHttps}`);
+      showSystemToast(`Redirigiendo a ruta segura HTTPS para cámara: ${targetHttps}`);
       setTimeout(() => { window.location.href = targetHttps; }, 1200);
       return;
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      let errDetail = "Cámara no disponible en este dispositivo.";
+      let errDetail = "Cámara no disponible en este navegador.";
       if (!isLocal && window.location.protocol !== 'https:') {
-        errDetail = "El navegador bloquea la cámara en HTTP móvil. Conéctate vía HTTPS o habilita la bandera en chrome://flags/#unsafely-treat-insecure-origin-as-secure. Se activa modo demostración.";
+        errDetail = "El navegador requiere conexión segura HTTPS para acceder a la cámara.";
       }
       console.warn(errDetail);
       showSystemToast(errDetail);
-      sendControl({ action: 'set_source', source: 'vehicles.mp4' });
       stopDeviceCamera(false);
       return;
     }
@@ -1043,7 +1341,6 @@ async function startDeviceCamera() {
         audio: false,
       });
     } catch (camErr) {
-      console.warn("Fallo con facingMode, intentando cualquier cámara:", camErr);
       stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: false,
@@ -1052,7 +1349,6 @@ async function startDeviceCamera() {
 
     clientVideoStream = stream;
 
-    // Configuración robusta para navegadores móviles y desktop
     videoElem.muted = true;
     videoElem.playsInline = true;
     videoElem.autoplay = true;
@@ -1060,12 +1356,10 @@ async function startDeviceCamera() {
     videoElem.setAttribute('webkit-playsinline', '');
     videoElem.srcObject = stream;
 
-    // Mantener visible el stream con los recuadros de IA (peatones en verde, fuego en rojo, placas)
     if (mainStream) {
       mainStream.style.display = 'block';
       mainStream.src = `/api/stream?t=${Date.now()}`;
     }
-    // videoElem opera en segundo plano para captura y envío de frames
     videoElem.style.display = 'none';
     videoElem.classList.remove('active');
     if (tacticalOverlay) {
@@ -1078,7 +1372,6 @@ async function startDeviceCamera() {
       console.warn("Auto-play requirió interacción:", playErr);
     });
 
-    // Esperar a que el hardware de video inicialice dimensiones reales
     if (videoElem.readyState < 2 || videoElem.videoWidth === 0) {
       await new Promise((resolve) => {
         const onReady = () => {
@@ -1106,12 +1399,8 @@ async function startDeviceCamera() {
     canvas.width = 640;
     canvas.height = 480;
 
-    const selSource = document.getElementById('select-video-source');
-    if (selSource) selSource.value = 'client_cam';
-
     sendControl({ action: 'set_source', source: 'client_cam' });
 
-    // WebSocket Uplink
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUplinkUrl = `${protocol}//${window.location.host}/ws/uplink`;
 
@@ -1124,7 +1413,6 @@ async function startDeviceCamera() {
       wsUplink.binaryType = 'arraybuffer';
 
       wsUplink.onopen = () => {
-        console.log('[Uplink] Cámara conectada vía WebSocket.');
         if (uplinkInterval) clearInterval(uplinkInterval);
         uplinkInterval = setInterval(() => {
           if (
@@ -1135,7 +1423,6 @@ async function startDeviceCamera() {
             !isFlippingCamera
           ) {
             if (videoElem.readyState < 2 || videoElem.videoWidth === 0) return;
-            // Throttling adaptativo
             if (wsUplink.bufferedAmount > 0) return;
 
             ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
@@ -1151,7 +1438,7 @@ async function startDeviceCamera() {
               }
             }, 'image/jpeg', 0.60);
           }
-        }, 55); // ~18 FPS estable
+        }, 55);
       };
 
       wsUplink.onclose = () => {
@@ -1178,12 +1465,12 @@ async function startDeviceCamera() {
     } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
       errMsg = "La cámara ya está siendo usada por otra aplicación.";
     }
-    showSystemToast(errMsg + " Activando modo demostración...");
+    showSystemToast(errMsg + " Manteniendo fuente del servidor.");
     stopDeviceCamera(true);
   }
 }
 
-function stopDeviceCamera(fallbackToDemo = true) {
+function stopDeviceCamera(restoreServerStream = true) {
   isCameraActive = false;
   isFlippingCamera = false;
   if (uplinkInterval) {
@@ -1219,7 +1506,6 @@ function stopDeviceCamera(fallbackToDemo = true) {
 
   if (cameraBadge) cameraBadge.style.display = 'none';
 
-  // Reanudar visualización del video stream del servidor
   if (mainStream) {
     mainStream.style.display = 'block';
     mainStream.src = `/api/stream?t=${Date.now()}`;
@@ -1233,10 +1519,13 @@ function stopDeviceCamera(fallbackToDemo = true) {
   if (iconElem) iconElem.setAttribute('data-lucide', 'camera');
   if (window.lucide) lucide.createIcons();
 
-  if (fallbackToDemo) {
-    const selSource = document.getElementById('select-video-source');
-    if (selSource) selSource.value = 'vehicles.mp4';
-    sendControl({ action: 'set_source', source: 'vehicles.mp4' });
+  if (restoreServerStream) {
+    const videoSelect = document.getElementById('select-video-sample');
+    const fallbackVideo = (videoSelect && videoSelect.value && videoSelect.value !== 'client_cam')
+      ? videoSelect.value
+      : 'Test1.mp4';
+    if (videoSelect) videoSelect.value = fallbackVideo;
+    sendControl({ action: 'set_source', source: fallbackVideo });
   }
 }
 
@@ -1248,6 +1537,7 @@ async function flipDeviceCamera() {
   showSystemToast(`Cambiando a cámara ${currentFacingMode === 'environment' ? 'trasera' : 'frontal'}...`);
 
   const videoElem = document.getElementById('client-webcam');
+  const mainStream = document.getElementById('main-stream');
   try {
     if (clientVideoStream) {
       clientVideoStream.getTracks().forEach((track) => track.stop());
@@ -1275,7 +1565,7 @@ async function flipDeviceCamera() {
       mainStream.style.display = 'block';
     }
     await videoElem.play().catch(() => {});
-    showSystemToast(`Cámara lista: ${currentFacingMode === 'environment' ? 'Trasera' : 'Frontal'}`);
+    showSystemToast(`Cámara activa: ${currentFacingMode === 'environment' ? 'Trasera' : 'Frontal'}`);
   } catch (err) {
     console.warn("Fallo alternando sensor de cámara:", err);
     showSystemToast("No se pudo alternar el sensor físico de cámara.");
@@ -1286,6 +1576,66 @@ async function flipDeviceCamera() {
 
 // --- 7. Eventos de Controles e Interacción ---
 function setupEventListeners() {
+  // Navegación del Sidebar
+  document.querySelectorAll('.sidebar-nav-item[data-view]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      playTacticalChirp();
+      const target = btn.getAttribute('data-view');
+      switchAppView(target, true);
+    });
+  });
+
+  // Trigger del Sidebar en el Header (colapsa en desktop / abre drawer en móvil)
+  const toggleSidebarBtn = document.getElementById('btn-toggle-sidebar');
+  const closeSidebarBtn = document.getElementById('btn-close-sidebar');
+  const appShell = document.getElementById('app-shell');
+  const sidebar = document.getElementById('app-sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+
+  const toggleMobileSidebar = (open) => {
+    if (!sidebar || !backdrop) return;
+    sidebar.classList.toggle('open', open);
+    backdrop.classList.toggle('active', open);
+  };
+
+  if (toggleSidebarBtn) {
+    toggleSidebarBtn.addEventListener('click', () => {
+      playTacticalChirp();
+      if (window.innerWidth <= 900) {
+        const isOpen = sidebar ? !sidebar.classList.contains('open') : true;
+        toggleMobileSidebar(isOpen);
+      } else if (appShell) {
+        appShell.classList.toggle('sidebar-collapsed');
+      }
+    });
+  }
+  if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => toggleMobileSidebar(false));
+  if (backdrop) backdrop.addEventListener('click', () => toggleMobileSidebar(false));
+
+  // Selector de Video Samples (Test1 - Test6) en el Header
+  const selectVideoSample = document.getElementById('select-video-sample');
+  if (selectVideoSample) {
+    selectVideoSample.addEventListener('change', (e) => {
+      playTacticalChirp();
+      const selectedSource = e.target.value;
+      if (selectedSource === 'client_cam') {
+        startDeviceCamera();
+      } else {
+        stopDeviceCamera(false);
+        sendControl({ action: 'set_source', source: selectedSource });
+        if (currentView !== 'home') {
+          switchAppView('home', true);
+        }
+        const mainStream = document.getElementById('main-stream');
+        if (mainStream) {
+          mainStream.style.display = 'block';
+          mainStream.src = `/api/stream?t=${Date.now()}`;
+        }
+        showSystemToast(`Analizando muestra de video: ${selectedSource}`);
+      }
+    });
+  }
+
   // Botón Activar / Detener Cámara
   const btnToggleCamera = document.getElementById('btn-toggle-camera');
   if (btnToggleCamera) {
@@ -1295,22 +1645,6 @@ function setupEventListeners() {
         stopDeviceCamera(true);
       } else {
         startDeviceCamera();
-      }
-    });
-  }
-
-  // Selector de Fuente de Video
-  const selectVideoSource = document.getElementById('select-video-source');
-  if (selectVideoSource) {
-    selectVideoSource.addEventListener('change', async (e) => {
-      playTacticalChirp();
-      const val = e.target.value;
-      if (val === 'client_cam') {
-        await startDeviceCamera();
-      } else {
-        stopDeviceCamera(false);
-        sendControl({ action: 'set_source', source: val });
-        showSystemToast(`Fuente cambiada a: ${val === '0' ? 'Cámara USB Servidor (0)' : 'Video Demo'}`);
       }
     });
   }
@@ -1345,7 +1679,7 @@ function setupEventListeners() {
     });
   }
 
-  // Sliders de Sensibilidad
+  // Sliders de Sensibilidad en el Sidebar
   const vehicleSlider = document.getElementById('slider-vehicle-conf');
   const fireSlider = document.getElementById('slider-fire-conf');
   const smokeSlider = document.getElementById('slider-smoke-conf');
@@ -1363,7 +1697,7 @@ function setupEventListeners() {
     fireSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('fire-conf-val');
-      const tag = val <= 0.22 ? ' (Alta)' : (val <= 0.40 ? ' (Óptima / Sin Reflejos)' : ' (Estricta)');
+      const tag = val <= 0.22 ? ' (Alta)' : (val <= 0.40 ? ' (Calibrado)' : ' (Estricta)');
       if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', fire_conf: val });
     });
@@ -1373,7 +1707,7 @@ function setupEventListeners() {
     smokeSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
       const valDisplay = document.getElementById('smoke-conf-val');
-      const tag = val <= 0.16 ? ' (Alta / Humo Tenue)' : (val <= 0.30 ? ' (Media)' : ' (Estricta)');
+      const tag = val <= 0.16 ? ' (Alta)' : (val <= 0.30 ? ' (Media)' : ' (Estricta)');
       if (valDisplay) valDisplay.textContent = val.toFixed(2) + tag;
       sendControl({ action: 'set_sensitivity', smoke_conf: val });
     });
@@ -1391,7 +1725,7 @@ function setupEventListeners() {
     });
   }
 
-  // Audio Toggle (Lucide)
+  // Audio Toggle
   const updateAudioIcon = () => {
     const audioIcon = document.getElementById('audio-icon-lucide');
     if (audioIcon) {
@@ -1412,19 +1746,6 @@ function setupEventListeners() {
   }
   updateAudioIcon();
 
-  // Pantalla Completa
-  const btnFullscreen = document.getElementById('btn-fullscreen');
-  if (btnFullscreen) {
-    btnFullscreen.addEventListener('click', () => {
-      playTacticalChirp();
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    });
-  }
-
   // Reconocer banner de alerta
   const btnDismiss = document.getElementById('banner-dismiss');
   if (btnDismiss) {
@@ -1434,18 +1755,17 @@ function setupEventListeners() {
     });
   }
 
-  // Limpiar bitácora
-  const btnClear = document.getElementById('btn-clear-log');
-  if (btnClear) {
-    btnClear.addEventListener('click', () => {
-      const timeline = document.getElementById('incident-timeline');
-      if (timeline) {
-        timeline.innerHTML = `<div class="empty-state">${I18N_DICTIONARY[currentLang].no_incidents}</div>`;
-      }
+  // Actualizar contexto ambiental
+  const btnRefreshContext = document.getElementById('btn-refresh-context');
+  if (btnRefreshContext) {
+    btnRefreshContext.addEventListener('click', () => {
+      playTacticalChirp();
+      requestUserLocation();
+      showSystemToast('Actualizando telemetría ambiental...');
     });
   }
 
-  // Botón de evaluación y despacho CAD-911 del Microservicio
+  // Despacho CAD-911
   const btnDispatchCad = document.getElementById('btn-dispatch-cad');
   if (btnDispatchCad) {
     btnDispatchCad.addEventListener('click', () => {
@@ -1456,29 +1776,15 @@ function setupEventListeners() {
   // Consulta manual de Placa o VIN
   const btnSearchPlate = document.getElementById('btn-search-plate');
   const plateInput = document.getElementById('plate-search-input');
-  if (plateInput) {
-    plateInput.addEventListener('input', () => {
-      userHasSearchedPlate = true;
-    });
-    plateInput.addEventListener('focus', () => {
-      userHasSearchedPlate = true;
-    });
-  }
   if (btnSearchPlate && plateInput) {
     btnSearchPlate.addEventListener('click', () => {
       const val = plateInput.value.trim();
-      if (val) {
-        userHasSearchedPlate = true;
-        lookupPlate(val, false);
-      }
+      if (val) lookupPlate(val);
     });
     plateInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const val = plateInput.value.trim();
-        if (val) {
-          userHasSearchedPlate = true;
-          lookupPlate(val, false);
-        }
+        if (val) lookupPlate(val);
       }
     });
   }
@@ -1508,7 +1814,7 @@ function setupEventListeners() {
               const pInput = document.getElementById('plate-search-input');
               if (pInput) pInput.value = data.plates[0].plate;
             } else {
-              alert("No se detectaron placas legibles en la imagen.");
+              showSystemToast("No se detectaron placas legibles en la imagen.");
             }
           }
         } catch (err) {
@@ -1519,7 +1825,7 @@ function setupEventListeners() {
     });
   }
 
-  // Carga de Video Nuevo en Vivo (Elegido por el juez)
+  // Carga de Video en Vivo
   const videoInput = document.getElementById('video-file-input');
   if (videoInput) {
     videoInput.addEventListener('change', async (e) => {
@@ -1527,7 +1833,7 @@ function setupEventListeners() {
       if (!file) return;
 
       playTacticalChirp();
-      showSystemToast(`Cargando video del juez: ${file.name}...`);
+      showSystemToast(`Cargando video para análisis: ${file.name}...`);
 
       try {
         const res = await fetch('/api/upload-video', {
@@ -1541,104 +1847,108 @@ function setupEventListeners() {
         if (res.ok) {
           const data = await res.json();
           stopDeviceCamera(false);
-          showSystemToast(`✅ ${data.message || 'Video cargado en vivo.'}`);
-          // Refrescar stream
+          showSystemToast(data.message || 'Video cargado en vivo.');
           const mainStream = document.getElementById('main-stream');
           if (mainStream) {
             mainStream.src = `/api/stream?t=${Date.now()}`;
           }
         } else {
-          showSystemToast('❌ Error subiendo video. Verifique formato.');
+          showSystemToast('Error subiendo video. Verifique formato.');
         }
       } catch (err) {
-        console.error('Error subiendo video del juez:', err);
-        showSystemToast('❌ Error de conexión al subir video.');
+        console.error('Error subiendo video:', err);
+        showSystemToast('Error de conexión al subir video.');
+      }
+    });
+  }
+
+  // Controles de la vista Historial
+  const filterStatus = document.getElementById('filter-status');
+  const filterType = document.getElementById('filter-type');
+  const btnSyncCloud = document.getElementById('btn-sync-cloud');
+  const btnFetchDossier = document.getElementById('btn-fetch-dossier');
+  const dossierIdInput = document.getElementById('dossier-id-input');
+
+  if (filterStatus) filterStatus.addEventListener('change', () => loadFullBacklog(false));
+  if (filterType) filterType.addEventListener('change', () => loadFullBacklog(false));
+  if (btnSyncCloud) {
+    btnSyncCloud.addEventListener('click', () => {
+      playTacticalChirp();
+      loadFullBacklog(true);
+      showSystemToast('Sincronizando registros del historial...');
+    });
+  }
+  if (btnFetchDossier && dossierIdInput) {
+    btnFetchDossier.addEventListener('click', () => {
+      const val = dossierIdInput.value.trim();
+      if (val) window.inspectIncidentDossier(val);
+    });
+    dossierIdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = dossierIdInput.value.trim();
+        if (val) window.inspectIncidentDossier(val);
       }
     });
   }
 }
 
-function updateActiveSourceBtn(source) {
-  document.querySelectorAll('.source-btn').forEach((btn) => {
-    if (btn.getAttribute('data-source') === source) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-}
-
 function applyLanguage(lang) {
   const dict = I18N_DICTIONARY[lang] || I18N_DICTIONARY.es;
-  const langText = document.getElementById('current-lang-text');
-  if (langText) langText.textContent = lang.toUpperCase();
+  const setTxt = (id, text) => {
+    const el = document.getElementById(id);
+    if (el && text) el.textContent = text;
+  };
 
-  const sub = document.getElementById('i18n-sub');
-  if (sub) sub.textContent = dict.sub;
+  setTxt('current-lang-text', lang.toUpperCase());
+  setTxt('i18n-sub', dict.sub);
+  setTxt('i18n-nav-home', dict.nav_home);
+  setTxt('i18n-nav-enrich', dict.nav_enrich);
+  setTxt('i18n-nav-history', dict.nav_history);
+  setTxt('i18n-pause', isPaused ? dict.resume : dict.pause);
+  setTxt('i18n-upload-video', dict.upload_video);
+  setTxt('i18n-motion-lbl', dict.motion_lbl);
+  setTxt('i18n-card-veh', dict.card_veh);
+  setTxt('i18n-card-ped', dict.card_ped);
+  setTxt('i18n-card-fire', dict.card_fire);
+  setTxt('i18n-card-smoke', dict.card_smoke);
+  setTxt('i18n-card-inc', dict.card_inc);
+  setTxt('i18n-card-plates', dict.card_plates);
+  setTxt('sidebar-plates-title', dict.sidebar_plates_title);
+  setTxt('i18n-plates-title', dict.plates_title);
+  setTxt('i18n-enrich-title', dict.enrich_title);
+  setTxt('i18n-ctrl-title', dict.ctrl_title);
+  setTxt('i18n-vehicle-sens', dict.vehicle_sens);
+  setTxt('i18n-fire-sens', dict.fire_sens);
+  setTxt('i18n-smoke-sens', dict.smoke_sens);
+  setTxt('i18n-tracking-title', dict.tracking_title);
+  setTxt('i18n-blackbox-title', dict.blackbox_title);
+  setTxt('i18n-connecting', dict.connecting);
 
-  const pause = document.getElementById('i18n-pause');
-  if (pause) pause.textContent = isPaused ? dict.resume : dict.pause;
-
-  const uploadVid = document.getElementById('i18n-upload-video');
-  if (uploadVid) uploadVid.textContent = dict.upload_video;
-
-  const motionLbl = document.getElementById('i18n-motion-lbl');
-  if (motionLbl) motionLbl.textContent = dict.motion_lbl;
-
-  const cardVeh = document.getElementById('i18n-card-veh');
-  if (cardVeh) cardVeh.textContent = dict.card_veh;
-
-  const cardPed = document.getElementById('i18n-card-ped');
-  if (cardPed) cardPed.textContent = dict.card_ped;
-
-  const cardFire = document.getElementById('i18n-card-fire');
-  if (cardFire) cardFire.textContent = dict.card_fire;
-
-  const cardSmoke = document.getElementById('i18n-card-smoke');
-  if (cardSmoke) cardSmoke.textContent = dict.card_smoke;
-
-  const cardInc = document.getElementById('i18n-card-inc');
-  if (cardInc) cardInc.textContent = dict.card_inc;
-
-  const cardPlates = document.getElementById('i18n-card-plates');
-  if (cardPlates) cardPlates.textContent = dict.card_plates;
-
-  const platesTitle = document.getElementById('i18n-plates-title');
-  if (platesTitle) platesTitle.textContent = dict.plates_title;
-
-  const enrichTitle = document.getElementById('i18n-enrich-title');
-  if (enrichTitle) enrichTitle.textContent = dict.enrich_title;
-
-  const ctrlTitle = document.getElementById('i18n-ctrl-title');
-  if (ctrlTitle) ctrlTitle.textContent = dict.ctrl_title;
-
-  const vehSens = document.getElementById('i18n-vehicle-sens');
-  if (vehSens) vehSens.textContent = dict.vehicle_sens;
-
-  const fireSens = document.getElementById('i18n-fire-sens');
-  if (fireSens) fireSens.textContent = dict.fire_sens;
-
-  const smokeSens = document.getElementById('i18n-smoke-sens');
-  if (smokeSens) smokeSens.textContent = dict.smoke_sens;
-
-  const trackingTitle = document.getElementById('i18n-tracking-title');
-  if (trackingTitle) trackingTitle.textContent = dict.tracking_title;
-
-  const blackboxTitle = document.getElementById('i18n-blackbox-title');
-  if (blackboxTitle) blackboxTitle.textContent = dict.blackbox_title;
-
-  const connecting = document.getElementById('i18n-connecting');
-  if (connecting) connecting.textContent = dict.connecting;
+  // Actualizar título de la vista activa en el navbar
+  switchAppView(currentView, false);
 
   if (window.lucide && typeof lucide.createIcons === 'function') {
     lucide.createIcons();
   }
 }
 
-// Inicialización de la aplicación (Mobile-First)
+// Inicialización de la aplicación
 document.addEventListener('DOMContentLoaded', () => {
+  const hashView = (window.location.hash || '').replace('#', '').toLowerCase();
+  if (['home', 'enriquecimiento', 'historial'].includes(hashView)) {
+    currentView = hashView;
+  }
+
   applyLanguage(currentLang);
   setupEventListeners();
+  switchAppView(currentView, false);
+
+  window.addEventListener('hashchange', () => {
+    const h = (window.location.hash || '').replace('#', '').toLowerCase();
+    if (['home', 'enriquecimiento', 'historial'].includes(h)) {
+      switchAppView(h, false);
+    }
+  });
 
   const mainStream = document.getElementById('main-stream');
   if (mainStream) {
@@ -1647,20 +1957,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (loader) loader.classList.add('hidden');
     });
     mainStream.addEventListener('error', () => {
-      // Reintentar stream tras breve espera si la red móvil reconecta
       setTimeout(() => {
         if (mainStream) mainStream.src = `/api/stream?t=${Date.now()}`;
       }, 2000);
     });
   }
 
-  // Salvaguarda: ocultar loader inicial si la cámara o telemetría tardan unos segundos
   setTimeout(() => {
     const loader = document.getElementById('stream-loader');
     if (loader) loader.classList.add('hidden');
   }, 2200);
 
-  // Inicializar estado del botón de cámara (manual para no interferir entre desktop y móvil)
   const btnCam = document.getElementById('btn-toggle-camera');
   const btnText = document.getElementById('camera-btn-text');
   if (btnCam) btnCam.classList.remove('danger-active');
@@ -1670,10 +1977,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadBacklogStatus();
   connectTelemetryWebSocket();
   requestUserLocation();
+  loadIncidentsHistory();
   setInterval(loadIncidentsHistory, 5000);
   setInterval(loadSituationalContext, 30000);
-  // Cargar una placa de demostración en el expediente solo si el usuario no ha interactuado aún
-  lookupPlate('ABC-1234', true);
 
   if (window.lucide && typeof lucide.createIcons === 'function') {
     lucide.createIcons();

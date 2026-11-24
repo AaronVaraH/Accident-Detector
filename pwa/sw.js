@@ -4,16 +4,21 @@
  * y despacho de notificaciones del sistema (Push / Web Notifications).
  */
 
-const CACHE_NAME = 'accident-detector-pwa-v8';
+const CACHE_NAME = 'accident-detector-pwa-v16';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
+  '/favicon.ico',
   '/static/style.css',
   '/static/app.js',
   '/static/lucide.min.js',
-  '/static/icon.svg',
-  '/static/icon-192.png',
-  '/static/icon-512.png',
+  '/static/Logo.png',
+  '/static/favicon/favicon.ico',
+  '/static/favicon/favicon-16x16.png',
+  '/static/favicon/favicon-32x32.png',
+  '/static/favicon/apple-touch-icon.png',
+  '/static/favicon/android-chrome-192x192.png',
+  '/static/favicon/android-chrome-512x512.png',
   '/static/alarma.mp3'
 ];
 
@@ -83,8 +88,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: '/static/icon-192.png',
-    badge: '/static/icon-192.png',
+    icon: '/static/favicon/android-chrome-192x192.png',
+    badge: '/static/favicon/android-chrome-192x192.png',
     vibrate: [250, 100, 250, 100, 500],
     data: { url: '/' },
     actions: [
